@@ -1,0 +1,949 @@
+[
+  {
+    "id": "2021-2022-a-1a",
+    "year": "2021-2022",
+    "section": "A",
+    "main": 1,
+    "part": "a",
+    "number": "1(a)",
+    "title": "Linking two C modules and loading the executable",
+    "topics": [
+      "Compiler pipeline",
+      "Linking and loading"
+    ],
+    "question": "Consider the C code shown below contained in two separate files. Discuss in detail the issues faced by the linker and the loader when the program is compiled and then executed. How will these issues be resolved? Explain. **(13)**\n\n**main.c**\n```c\n#include <stdio.h>\nvoid main()\n{\n    .......;\n    int i;\n    i = subfunction();\n    exit();\n}\n```\n**subcode.c**\n```c\nvoid subfunction()\n{\n    int i, n = 0;\n    for (i = 1; i <= 50; i++)\n    {\n        n = n + i;\n    }\n    return n;\n}\n```",
+    "solution": "**First separate compilation errors from linking/loading issues.** The printed fragment is not a well-formed portable hosted C program: `subfunction` is declared `void` but returns a value, its value is assigned to `i`, it has no visible declaration at the call, and `exit` needs `<stdlib.h>` and a status argument. A portable hosted entry point returns `int`. Treat `.......` as omitted valid statements. Correct the intended interfaces to:\n\n```c\n/* shared header: subcode.h */\nint subfunction(void);\n\n/* main.c */\n#include <stdlib.h>\n#include \"subcode.h\"\nint main(void) {\n    int i = subfunction();\n    /* use i as required */\n    exit(EXIT_SUCCESS);  /* or return EXIT_SUCCESS; */\n}\n\n/* subcode.c */\n#include \"subcode.h\"\nint subfunction(void) {\n    int n = 0;\n    for (int i = 1; i <= 50; ++i) n += i;\n    return n;\n}\n```\n\n**Linker.** Separate compilation produces relocatable object files. `main.o` defines `main` and has unresolved references to `subfunction` and library routine `exit`; `subcode.o` exports `subfunction`. Final addresses are unknown when either source is compiled. The linker:\n\n1. Matches the undefined `subfunction` reference to its definition in `subcode.o`. Omitting that object causes an undefined-symbol error; supplying two global definitions causes a multiple-definition error.\n2. Resolves `exit` through the C runtime library, including library code for static linking or recording a dynamic import. A header supplies declarations, not the library implementation.\n3. Combines and lays out code/data sections and applies relocation records so cross-module calls and other address-dependent references target their final locations. Internal jumps in the loop also require fixup if their representation depends on placement.\n\nThe two `i` variables are automatic locals of different activations; they do not conflict as linker symbols. Local `n` likewise needs no external resolution. Ordinary C linking generally resolves names/addresses rather than proving that separately compiled function types agree; a shared declaration lets the compiler check those interfaces.\n\n**Loader and execution.** The loader maps executable code/data into the process address space, initializes zero-filled storage, establishes the initial stack, and transfers control through runtime startup to `main`. If the actual load base differs from the assumed one, remaining relocations must be applied (or position-independent addressing used). With dynamic linking, the runtime linker maps shared libraries and binds imported symbols such as `exit`, eagerly or lazily. Missing libraries/symbols cause loading or binding failure.\n\nThe calling convention creates the callee activation and returns the result in the agreed place. The corrected function computes \\(1+\\cdots+50=50\\cdot51/2=1275\\), which `main` receives; `exit(EXIT_SUCCESS)` performs normal runtime termination. These calling-convention operations are distinct from resolving the call address.",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          46,
+          47,
+          48,
+          50,
+          51,
+          52,
+          53,
+          54,
+          56
+        ]
+      },
+      {
+        "doc": "kms",
+        "pages": [
+          220,
+          226
+        ]
+      }
+    ],
+    "warnings": [
+      "The printed C has invalid/inconsistent interfaces. The linking/loading discussion assumes the explicitly corrected intended program; successful linking cannot repair source-level type errors."
+    ],
+    "checks": [
+      "Verified relocation/linker/loader roles against Rumi pp46–56 and independently computed the intended sum, 1275."
+    ]
+  },
+  {
+    "id": "2021-2022-a-1b",
+    "year": "2021-2022",
+    "section": "A",
+    "main": 1,
+    "part": "b",
+    "number": "1(b)",
+    "title": "Maximal-munch scanning with two pointers",
+    "topics": [
+      "Lexical analysis"
+    ],
+    "question": "The partial contents of a buffer in lexical analyzer is `dhaka␣+++␣123.456␣`, where `␣` indicates a space. At the current moment, both the `lexemeBegin` and `forward` pointers are on d at left. From the perspective of the C programming language, describe clearly the pointer movements and recognition of tokens that will happen. **(10)**",
+    "solution": "Apply **longest match (maximal munch)**. Zero-based positions are: `dhaka` at 0–4, space at 5, `+++` at 6–8, space at 9, `123.456` at 10–16, and space at 17.\n\n`lexemeBegin` stays fixed while `forward` searches. A delimiter examined during lookahead remains available for the next scan; if already consumed, retract. The lecture places `forward` at the accepted lexeme's right end. An implementation with `forward` as the next unread character differs by one position but accepts the same spans.\n\n| Scan | Pointer movement and recognition | Returned token | Next `lexemeBegin` |\n|---|---|---|---|\n| Identifier | Start both at 0; advance over `d h a k a`. Inspect space at 5, which cannot extend an identifier. Accepted right end: 4. | `⟨id, symbol-table-entry(\"dhaka\")⟩` | 5; skip space to 6 |\n| First operator | Start at 6; the first two pluses match C's `++`. The third plus at 8 cannot extend `++` to a longer C punctuator. Accepted right end: 7. | `++` | 8 |\n| Second operator | Start at 8; space at 9 ends the single `+`. Accepted right end: 8. | `+` | 9; skip space to 10 |\n| Number | Start at 10; after `123`, the dot can extend the number, so scan `.456`. Space at 17 terminates it. Accepted right end: 16. | `⟨floating-constant, 123.456⟩` or pointer to a spelling/value record | 17; skip space to following input |\n\nThus the tokens are **`id ++ + floating-constant`**. Spaces are discarded. `+++` is neither three `+` tokens nor one token, and `123.456` is one floating constant, not integer/dot/integer. Whether the sequence is a legal expression is a later parsing/type question. Because the buffer is partial, its final space is not end of file.",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          146,
+          148,
+          152,
+          154,
+          155,
+          166,
+          167,
+          171,
+          172
+        ]
+      }
+    ],
+    "warnings": [
+      "Zero-based indices are used; accepted right-end versus next-unread pointer conventions are distinguished explicitly."
+    ],
+    "checks": [
+      "Counted every buffer position and verified token spans 0–4, 6–7, 8, and 10–16."
+    ]
+  },
+  {
+    "id": "2021-2022-a-1c",
+    "year": "2021-2022",
+    "section": "A",
+    "main": 1,
+    "part": "c",
+    "number": "1(c)",
+    "title": "What a viable prefix means on the parsing stack",
+    "topics": [
+      "LR parsing"
+    ],
+    "question": "Justify with proper reasons the acceptability (or unacceptability) of each of the following statements at any valid state in shift-reduce parsing. **(12)**\n\n(i) Viable prefixes appear only at the bottom of the stack and not inside.\n\n(ii) Viable prefixes appear only at the top of the stack and not inside.\n\n(iii) The stack contains only a set of viable prefixes.\n\n(iv) Viable prefixes do not continue past the right end of the rightmost handle of that sentential form.",
+    "solution": "A **viable prefix** is a prefix of a right-sentential form that does not extend beyond the right end of its handle. Ignore the bottom marker and parser states when reading the stack's grammar-symbol string. At a valid configuration, that whole string and each of its initial segments are viable prefixes.\n\n| Statement | Judgment and reason |\n|---|---|\n| (i) Bottom, not inside | **Acceptable in the intended stack-prefix sense:** an initial segment starts at the bottom and extends upward; it need not reach the top. “Only” must describe its anchoring, not forbid equal strings from coincidentally occurring elsewhere. |\n| (ii) Top, not inside | **Unacceptable.** A top-ending substring is a suffix, not necessarily a prefix. With `S→aA`, `A→b`, the valid stack `ab` has bottom prefixes `ε`, `a`, `ab`; the top substring `b` is not a viable prefix of this grammar. |\n| (iii) Only a set of viable prefixes | **Acceptable if it means the nested bottom prefixes, including the entire stack, are viable.** It does not mean an unordered set or that every arbitrary interior substring is viable. The stack is an ordered sequence. |\n| (iv) Does not pass the handle's right end | **Acceptable: this is the defining bound.** The parser shifts up to that end and reduces the handle before shifting the following terminal suffix. |\n\nThe handle itself is a **suffix at the top immediately before reduction**, and need not begin at the bottom. A handle and a viable prefix therefore express different relationships to the stack.\n\nA literal reading of (i) as “no interior substring can also belong to the viable-prefix language” is overstrong: with `S→aa`, the valid stack `aa` has viable-prefix string `a` both at the bottom and at the top. The bottom-anchored interpretation is the intended useful invariant.",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          507,
+          512,
+          513,
+          514,
+          519,
+          520,
+          521,
+          524
+        ]
+      }
+    ],
+    "warnings": [
+      "The informal wording in (i) and (iii) is interpreted as bottom-anchored prefixes; arbitrary substring occurrences and an unordered set are distinguished."
+    ],
+    "checks": [
+      "Checked counterexamples S→aA,A→b and S→aa, and the handle-at-top invariant on pp519–524."
+    ]
+  },
+  {
+    "id": "2021-2022-a-2a",
+    "year": "2021-2022",
+    "section": "A",
+    "main": 2,
+    "part": "a",
+    "number": "2(a)",
+    "title": "Why lexical and syntactic analysis are separated",
+    "topics": [
+      "Lexical analysis",
+      "Compiler pipeline"
+    ],
+    "question": "Among the reasons why the analysis portion of the compiler is normally separated into lexical analysis and parsing (syntax analysis) phases, simplicity of design is the most important consideration — explain and justify. **(10)**",
+    "solution": "The scanner decides **which character sequence is the next token**; the parser decides **how tokens are structurally related**. Giving each phase one level of structure reduces the complexity of both their descriptions and implementations.\n\nFor example, `sum /* partial result */ = sum + 123;` reaches the parser as `id = id + number ;`. The scanner removes irrelevant whitespace/comments and attaches identifier/number information. The parser needs assignment/expression rules, without alternatives for arbitrary comments and spaces between every pair of symbols or productions spelling individual identifier characters. Similarly, `<=` reaches the parser as one relational token.\n\nIdentifiers, literals, and many operator patterns are naturally described by regular expressions and implemented by finite automata. Nested statements/expressions naturally use context-free grammars and parser stacks. Combining them would mix concerns, enlarge grammars, complicate error handling and make changes harder: modifying comments should not require modifying expression parsing.\n\nThe interface—token name plus optional attribute—hides character details while preserving translation information. Separation also enables specialized buffering/automata for speed and confines encoding/newline/device conventions to the scanner, improving portability. These are valuable, but **simplicity is primary**: the design becomes easier to understand, implement, maintain, and verify even before performance optimization.",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          140,
+          141,
+          142,
+          143,
+          144,
+          145,
+          146
+        ]
+      }
+    ],
+    "warnings": [],
+    "checks": [
+      "Verified the three lecture reasons on pp142–145 and expanded the explicit whitespace/comment example."
+    ]
+  },
+  {
+    "id": "2021-2022-a-2b",
+    "year": "2021-2022",
+    "section": "A",
+    "main": 2,
+    "part": "b",
+    "number": "2(b)",
+    "title": "Executing an LR reduce action precisely",
+    "topics": [
+      "LR parsing"
+    ],
+    "question": "In the LR-parsing algorithm, if `ACTION[sm, ai] = reduce A → β`, describe in detail how exactly this action is carried out. The symbols have got their meaning used in the class. What is the relationship of β with the stack content? **(10)**",
+    "solution": "Let the state-only configuration be `(s0 s1 ... sm, ai ai+1 ... an $)` and let \\(r=|\\beta|\\), counting **grammar symbols**.\n\n1. Retain/read the right-hand-side attributes if required by the semantic action.\n2. Pop the top **r states**, exposing \\(s_{m-r}\\). The represented grammar symbols \\(X_{m-r+1}\\cdots X_m\\) are exactly β: the reducible handle is a suffix on top of the symbol stack, not an arbitrary matching interior substring.\n3. Compute \\(t=\\operatorname{GOTO}[s_{m-r},A]\\) and push t. Conceptually, β is replaced by A.\n4. Execute the production's semantic action and attach A's semantic value as required. **Do not advance the input**; lookahead remains \\(a_i\\).\n\nThe resulting configuration is `(s0 ... s(m-r) t, ai ai+1 ... an $)`.\n\nIf the implementation interleaves states and symbols, `s0 X1 s1 ... Xm sm`, pop **2r entries**, then push `A t`. This is the same reduction in a different representation. The lecture's algorithm stores states only.\n\nFor `A→ε`, r=0: pop nothing and push `GOTO[sm,A]`, still consuming no input. State and lookahead select the valid reduction; the mere presence of a production body on the stack is not enough.",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          656,
+          660,
+          661,
+          663,
+          664,
+          665,
+          667,
+          668,
+          669,
+          670
+        ]
+      }
+    ],
+    "warnings": [],
+    "checks": [
+      "Checked exact pop counts, unchanged lookahead, represented-symbol suffix and GOTO formula against pp667–670."
+    ]
+  },
+  {
+    "id": "2021-2022-a-2c",
+    "year": "2021-2022",
+    "section": "A",
+    "main": 2,
+    "part": "c",
+    "number": "2(c)",
+    "title": "The main classes of programming-language tokens",
+    "topics": [
+      "Lexical analysis"
+    ],
+    "question": "Enumerate and explain the classes that cover most or all of the tokens in the programming languages. **(7)**",
+    "solution": "The lecture gives five common classes:\n\n| Class | Organization and examples |\n|---|---|\n| Keywords | Usually one token per reserved word, e.g. `if`, `while`, `return`; its pattern is its spelling. |\n| Operators | Individual tokens such as `+`, `*`, `++`, or a class such as `relop` with an attribute distinguishing `<`, `<=`, `==`, etc. |\n| Identifiers | One token `id` covers many names (`count`, `total`); an attribute identifies the symbol-table entry. |\n| Constants/literals | One or more tokens cover integer, floating, character, and string literals; attributes retain value, spelling/type or a table reference. |\n| Punctuation/separators | `(`, `)`, `{`, `}`, `,`, `;`, etc. delimit grammatical structures. |\n\nA token name/class is part of the parser's vocabulary; a lexeme is a particular matched spelling. Comments and irrelevant whitespace are normally discarded. End-of-input/error markers may additionally be used as implementation aids.",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          146,
+          147,
+          148,
+          151,
+          152,
+          155
+        ]
+      }
+    ],
+    "warnings": [],
+    "checks": [
+      "Matched all five classes directly to p151."
+    ]
+  },
+  {
+    "id": "2021-2022-a-2d",
+    "year": "2021-2022",
+    "section": "A",
+    "main": 2,
+    "part": "d",
+    "number": "2(d)",
+    "title": "When a token needs an attribute",
+    "topics": [
+      "Lexical analysis"
+    ],
+    "question": "What is the one-liner rule to determine whether a token will require an attribute or not? Are all the token attributes single values? Explain. **(5)**",
+    "solution": "**A token requires an attribute when its token name alone does not preserve the information about the matched lexeme needed by later phases.** A pattern matching several relevant lexemes generally needs information distinguishing the particular match.\n\n`id` needs to distinguish `x` from `y`, usually by a symbol-table pointer; `number` needs to distinguish `0` from `1`. A shared `relop` token needs an operator attribute, whereas a dedicated `while` or `;` token usually needs no attribute.\n\n**One attribute slot need not be one scalar fact.** It may hold a record or a pointer to a record/table entry containing several fields. An identifier entry can hold its spelling, type, scope/storage information and source location. A literal record can retain its exact spelling and type as well as its value. The lecture assumes at most one associated attribute per token, explicitly allowing that attribute to have structure.",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          152,
+          153,
+          154,
+          155,
+          156,
+          157
+        ]
+      }
+    ],
+    "warnings": [],
+    "checks": [
+      "Verified the structured-attribute qualification on p154 and symbol-table-pointer example on p155."
+    ]
+  },
+  {
+    "id": "2021-2022-a-2e",
+    "year": "2021-2022",
+    "section": "A",
+    "main": 2,
+    "part": "e",
+    "number": "2(e)",
+    "title": "Is lexical input buffering essential?",
+    "topics": [
+      "Lexical analysis"
+    ],
+    "question": "Is input buffering essential in lexical analysis? Explain. **(3)**",
+    "solution": "**Block/two-buffer input buffering is not logically essential to recognition; it is a major efficiency technique.** A lexer can read one character at a time and recognize the same tokens if it retains the lexeme and necessary lookahead or supports retraction.\n\nLookahead is needed, for example, to distinguish `=` from `==` and find an identifier's end. Buffering supports it conveniently while reducing expensive input operations: a block read obtains many characters, two buffers permit boundary-crossing scans, and sentinels reduce boundary checks. Buffering is practically valuable for speed, but an in-memory input string or another lookahead mechanism can replace the specific scheme without changing correctness.",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          166,
+          167,
+          168,
+          169,
+          171,
+          172,
+          173,
+          174,
+          175
+        ]
+      }
+    ],
+    "warnings": [],
+    "checks": [
+      "Distinguished block-read speed motivation from the separate need to retain lookahead."
+    ]
+  },
+  {
+    "id": "2021-2022-a-3a",
+    "year": "2021-2022",
+    "section": "A",
+    "main": 3,
+    "part": "a",
+    "number": "3(a)",
+    "title": "The exact nullable condition for FIRST",
+    "topics": [
+      "FIRST and FOLLOW"
+    ],
+    "question": "Explain clearly with examples, for a production rule like `X → Y1Y2...Yk`, when ε is included in FIRST(X). **(8)**",
+    "solution": "This production adds ε to FIRST(X) **if and only if every body symbol is nullable**:\n\n\\[\n\\varepsilon\\in\\operatorname{FIRST}(Y_j)\\quad\\text{for every }j=1,\\ldots,k,\n\\]\n\nor equivalently \\(Y_1\\cdots Y_k\\Rightarrow^*\\varepsilon\\). A direct `X→ε` is the k=0 case. If X has several alternatives, **one** all-nullable alternative suffices; not all alternatives need be nullable.\n\nFor example:\n```text\nX → A B C\nA → a | ε\nB → b | ε\nC → c | ε\n```\nAll three are nullable, so `X⇒ABC⇒εBC⇒εεC⇒ε`. FIRST(X) = {a,b,c,ε}: b can begin after A disappears, and c after both A and B disappear.\n\nIf `C→c` only, FIRST(X) = {a,b,c}, without ε. Likewise `X→A t B` cannot derive ε because terminal t cannot disappear. But `X→A t B | D`, `D→ε` does put ε in FIRST(X), using the second alternative.\n\nIn computation, add `FIRST(Yi)−{ε}` when all earlier symbols are nullable, then add ε only if this test reaches the entire body's end. Nullable Y1 alone is insufficient.",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          316,
+          423,
+          424,
+          425
+        ]
+      }
+    ],
+    "warnings": [
+      "Rumi p424 informally says everything in FIRST(Y1) enters FIRST(X). This needs the non-ε qualification: ε requires the entire right-hand side to be nullable, as the formal rule on that same page says."
+    ],
+    "checks": [
+      "Derived the nullable and terminal-blocked examples and checked the formal condition on pp424–425."
+    ]
+  },
+  {
+    "id": "2021-2022-a-3b",
+    "year": "2021-2022",
+    "section": "A",
+    "main": 3,
+    "part": "b",
+    "number": "3(b)",
+    "title": "Applying an epsilon entry in a predictive table",
+    "topics": [
+      "LL parsing",
+      "FIRST and FOLLOW"
+    ],
+    "question": "Describe what exactly happens during parsing when a cell of the predictive parsing table has an empty production rule like `A → ε`. **(6)**",
+    "solution": "With A on the stack top and lookahead a, if `M[A,a]=A→ε`, **pop A, push nothing and consume no input**. A contributes no terminals; continue with the newly exposed stack top and the same lookahead.\n\nFor `S→aAb`, `A→c | ε`, on input `ab$`, matching a leaves stack `A b $` (top at left), input `b$`. Since `b∈FOLLOW(A)`, the entry contains `A→ε`. The stack becomes `b $`, input still `b$`; only the next terminal-match step consumes b. A tree may display an ε child, but ε is not an input token.\n\nA table cell **containing an ε-production is not an empty/error cell**. The former is a valid choice under FOLLOW(A); the latter signals no applicable production and hence a syntax error. In recursive descent, A returns without changing lookahead, while still executing any semantic action attached to its ε-production.",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          302,
+          303,
+          320,
+          321,
+          322,
+          323,
+          324,
+          443,
+          445
+        ]
+      }
+    ],
+    "warnings": [],
+    "checks": [
+      "Checked the ab stack/input trace and the lecture's unchanged-lookahead explanation on p323."
+    ]
+  },
+  {
+    "id": "2021-2022-a-3c",
+    "year": "2021-2022",
+    "section": "A",
+    "main": 3,
+    "part": "c",
+    "number": "3(c)",
+    "title": "The choices made by top-down and bottom-up parsers",
+    "topics": [
+      "LL parsing",
+      "LR parsing"
+    ],
+    "question": "What are the key decisions during top-down and bottom-up parsing? **(6)**",
+    "solution": "**Top-down:** Choose **which production expands the current nonterminal**, usually the leftmost unexpanded one, before recognizing its body. The parser builds a leftmost derivation/root-to-leaves tree. For `S→aA | bB`, lookahead a selects the first alternative. Predictive parsing uses FIRST/FOLLOW to avoid backtracking.\n\n**Bottom-up:** Decide **when to shift versus reduce**. On reduction, determine the handle's left boundary and **which production replaces the handle**; its right end is the stack top. These steps build the tree leaves-to-root and recover a rightmost derivation in reverse. A substring matching a production body need not be the correct handle in context. LR state/lookahead and ACTION encode the correct shift, reduce, accept or error choice.\n\nThe essential contrast is choosing a production before its body is recognized versus recognizing a handle and then replacing it by its head.",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          297,
+          304,
+          305,
+          319,
+          325,
+          326,
+          507,
+          509,
+          510,
+          511,
+          519,
+          524,
+          656
+        ]
+      }
+    ],
+    "warnings": [],
+    "checks": [
+      "Compared predictive-production choice with the four shift-reduce actions and the lecture handle counterexample."
+    ]
+  },
+  {
+    "id": "2021-2022-a-3d",
+    "year": "2021-2022",
+    "section": "A",
+    "main": 3,
+    "part": "d",
+    "number": "3(d)",
+    "title": "Parse tree and handle pruning for kwwrgz",
+    "topics": [
+      "LR parsing"
+    ],
+    "question": "Consider the following grammar. **(10)**\n```text\nA → kXYz\nX → Xwr | w\nY → g\n```\nFor the string `kwwrgz`, draw the parse tree and hence identify the handles for bottom-up parsing.",
+    "solution": "The first w is produced by inner `X→w`; the following wr is added by outer `X→Xwr`.\n\n```mermaid\nflowchart TD\n    A[\"A\"] --> k[\"k\"]\n    A --> X0[\"X\"]\n    A --> Y[\"Y\"]\n    A --> z[\"z\"]\n    X0 --> X1[\"X\"]\n    X0 --> w2[\"w\"]\n    X0 --> r[\"r\"]\n    X1 --> w1[\"w\"]\n    Y --> g[\"g\"]\n```\n\nThe leaf order is `k w w r g z`. A **rightmost derivation** is\n```text\nA ⇒ k X Y z ⇒ k X g z ⇒ k X w r g z ⇒ k w w r g z.\n```\nReverse this derivation; brackets mark the particular handle occurrence:\n\n| Current right-sentential form | Handle and production | After reduction |\n|---|---|---|\n| `k [w] w r g z` | first `w`, `X→w` | `k X w r g z` |\n| `k [X w r] g z` | `Xwr`, `X→Xwr` | `k X g z` |\n| `k X [g] z` | `g`, `Y→g` | `k X Y z` |\n| `[k X Y z]` | `kXYz`, `A→kXYz` | `A` |\n\nThe handles are **w, Xwr, g, kXYz**, in that order. The first handle is the first w, not the second: matching a production body alone does not identify the correct occurrence.",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          507,
+          512,
+          513,
+          514,
+          516,
+          517,
+          518
+        ]
+      }
+    ],
+    "warnings": [],
+    "checks": [
+      "Verified the tree yield and reversed every step of the displayed rightmost derivation."
+    ]
+  },
+  {
+    "id": "2021-2022-a-3e",
+    "year": "2021-2022",
+    "section": "A",
+    "main": 3,
+    "part": "e",
+    "number": "3(e)",
+    "title": "Why each handle reaches the stack top",
+    "topics": [
+      "LR parsing"
+    ],
+    "question": "In shift-reduce parsing, the handle will always eventually appear on top of the stack, never inside — justify this statement for the problem in (d). **(5)**\n\nGrammar: `A→kXYz`, `X→Xwr | w`, `Y→g`. Input: `kwwrgz`.",
+    "solution": "The parser shifts up to the next handle's right end, then reduces it **before** shifting terminals that follow it:\n\n| Stack (top at right) | Remaining input | Next action |\n|---|---|---|\n| `$` | `kwwrgz$` | shift k |\n| `$k` | `wwrgz$` | shift first w |\n| `$kw` | `wrgz$` | reduce top `w→X` |\n| `$kX` | `wrgz$` | shift w |\n| `$kXw` | `rgz$` | shift r |\n| `$kXwr` | `gz$` | reduce top `Xwr→X` |\n| `$kX` | `gz$` | shift g |\n| `$kXg` | `z$` | reduce top `g→Y` |\n| `$kXY` | `z$` | shift z |\n| `$kXYz` | `$` | reduce top `kXYz→A` |\n| `$A` | `$` | accept |\n\nEvery reduced handle is a suffix: **its right end is at the top**, although its left end can be deep in the stack. The final handle spans the whole stack above `$`.\n\nIn a right-sentential form `αβw`, β is the next handle and w contains only terminals. The parser holds `αβ` and leaves w unread. Shifting part of w before reducing β would bury that selected handle and stop following the reverse rightmost derivation. This is an invariant of correct parsing decisions, not a claim about arbitrary shift sequences or arbitrary production-body occurrences.",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          512,
+          513,
+          514,
+          519,
+          520,
+          521,
+          524
+        ]
+      }
+    ],
+    "warnings": [],
+    "checks": [
+      "Checked all six shifts and four reductions against the handle sequence of 3(d)."
+    ]
+  },
+  {
+    "id": "2021-2022-a-4a",
+    "year": "2021-2022",
+    "section": "A",
+    "main": 4,
+    "part": "a",
+    "number": "4(a)",
+    "title": "Removing direct and indirect left recursion",
+    "topics": [
+      "LL parsing"
+    ],
+    "question": "Eliminate left recursion from the grammar. **(12)**\n```text\nS → SBr | a\nB → Cs | b\nC → St | c\n```",
+    "solution": "Process the nonterminals in order **S, B, C**. First eliminate S's immediate left recursion `S→S(Br) | a` using a fresh R:\n\n```text\nS → a R\nR → B r R | ε\n```\n\nB starts with C, a later nonterminal, so it remains `B→Cs | b`. For C, substitute the now left-recursion-free `S→aR` into `C→St`:\n\n```text\nC → a R t | c\n```\n\nA complete equivalent grammar is therefore\n\n```text\nS → a R\nR → B r R | ε\nB → C s | b\nC → a R t | c\n```\n\nR generates zero or more Br suffixes, so `S⇒a(Br)^m`, exactly the shape obtained by repeatedly using original `S→SBr` and finally `S→a`. Replacing `St` by `aRt` is a substitution of the same S language.\n\nThere is **no left recursion**, including through nullable symbols: S starts with terminal a; C starts with a or c; B starts with C or terminal b; R starts with B or is empty. The only nontrivial left-corner chain is `R→B→C→terminal`, never back to its start. The recursive R inside `aRt` or after `Br` is preceded by a terminal-producing prefix, so it is not left recursion. This transformation does not claim that the resulting grammar is LL(1); that is a separate property.",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          337,
+          338,
+          395,
+          398,
+          399,
+          400
+        ]
+      }
+    ],
+    "warnings": [],
+    "checks": [
+      "Checked equivalence through the S⇒a(Br)^m expansion and inspected the nullable-aware left-corner graph for cycles."
+    ]
+  },
+  {
+    "id": "2021-2022-a-4b",
+    "year": "2021-2022",
+    "section": "A",
+    "main": 4,
+    "part": "b",
+    "number": "4(b)",
+    "title": "All canonical LR(1) item sets",
+    "topics": [
+      "LR parsing",
+      "FIRST and FOLLOW"
+    ],
+    "question": "For the grammar shown below, find the LR(1) canonical items. **(10)**\n```text\nS → aAd | bBd | aBe | bAe\nA → c\nB → c\n```",
+    "solution": "Augment with `S′→S`. An item `[P→α·β, x]` carries one lookahead x. Closure adds `[Q→·γ, y]` for every `y∈FIRST(βx)` when the item is `[P→α·Qβ,x]`. GOTO moves the dot over one symbol and closes the set. The complete collection has **14 states**; the following numbering is used again in 4(c).\n\n```text\nI0:\n [S′→·S, $]\n [S→·aAd, $]\n [S→·bBd, $]\n [S→·aBe, $]\n [S→·bAe, $]\n\nI1 = GOTO(I0,a):\n [S→a·Ad, $]\n [S→a·Be, $]\n [A→·c, d]\n [B→·c, e]\n\nI2 = GOTO(I0,b):\n [S→b·Bd, $]\n [S→b·Ae, $]\n [B→·c, d]\n [A→·c, e]\n\nI3 = GOTO(I0,S):\n [S′→S·, $]\n\nI4 = GOTO(I1,c):\n [A→c·, d]\n [B→c·, e]\n\nI5 = GOTO(I1,A):\n [S→aA·d, $]\n\nI6 = GOTO(I1,B):\n [S→aB·e, $]\n\nI7 = GOTO(I2,c):\n [A→c·, e]\n [B→c·, d]\n\nI8 = GOTO(I2,A):\n [S→bA·e, $]\n\nI9 = GOTO(I2,B):\n [S→bB·d, $]\n\nI10 = GOTO(I5,d):\n [S→aAd·, $]\n\nI11 = GOTO(I6,e):\n [S→aBe·, $]\n\nI12 = GOTO(I8,e):\n [S→bAe·, $]\n\nI13 = GOTO(I9,d):\n [S→bBd·, $]\n```\n\nThese listed GOTO links are all the nonempty transitions. For example, I1's A item gets d because `FIRST(d$)={d}`, while its B item gets e because `FIRST(e$)={e}`.\n\n**Keep I4 and I7 separate:** their LR(0) cores agree, but their lookaheads are reversed. On d, I4 reduces A→c while I7 reduces B→c. Their separation is precisely why the canonical LR(1) parser succeeds on this grammar. Merging them for LALR would create reduce/reduce conflicts on both d and e.",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          586,
+          588,
+          616,
+          617,
+          652,
+          694,
+          695,
+          696
+        ]
+      }
+    ],
+    "warnings": [
+      "The supplied Rumi slides explain LR(0)/SLR items and GOTO and mention canonical LR/LALR, but do not provide this LR(1) worked example. The lookahead closure and all 14 states here are explicitly derived, rather than represented as a copied lecture example."
+    ],
+    "checks": [
+      "Programmatically computed FIRST, LR(1) closure/GOTO and the 14-state collection; independently checked the exchanged lookaheads in I4 and I7."
+    ]
+  },
+  {
+    "id": "2021-2022-a-4c",
+    "year": "2021-2022",
+    "section": "A",
+    "main": 4,
+    "part": "c",
+    "number": "4(c)",
+    "title": "Complete CLR ACTION and GOTO table",
+    "topics": [
+      "LR parsing"
+    ],
+    "question": "From the LR(1) canonical items in Question 4(b) construct the CLR parsing table. **(8)**\n\nGrammar: `S→aAd | bBd | aBe | bAe`, `A→c`, `B→c`.",
+    "solution": "Use production numbers\n\n```text\n(0) S′→S\n(1) S→aAd     (2) S→bBd\n(3) S→aBe     (4) S→bAe\n(5) A→c       (6) B→c\n```\n\nUse the I0–I13 numbering listed in 4(b). `sj` means shift and enter Ij, `ri` means reduce using production i, and `—` is an error. In **CLR**, completed items reduce only on their own lookaheads, not on the whole FOLLOW set.\n\n| State | a | b | c | d | e | $ | GOTO S | GOTO A | GOTO B |\n|---|---|---|---|---|---|---|---|---|---|\n| 0 | s1 | s2 | — | — | — | — | 3 | — | — |\n| 1 | — | — | s4 | — | — | — | — | 5 | 6 |\n| 2 | — | — | s7 | — | — | — | — | 8 | 9 |\n| 3 | — | — | — | — | — | accept | — | — | — |\n| 4 | — | — | — | r5 | r6 | — | — | — | — |\n| 5 | — | — | — | s10 | — | — | — | — | — |\n| 6 | — | — | — | — | s11 | — | — | — | — |\n| 7 | — | — | — | r6 | r5 | — | — | — | — |\n| 8 | — | — | — | — | s12 | — | — | — | — |\n| 9 | — | — | — | s13 | — | — | — | — | — |\n| 10 | — | — | — | — | — | r1 | — | — | — |\n| 11 | — | — | — | — | — | r3 | — | — | — |\n| 12 | — | — | — | — | — | r4 | — | — | — |\n| 13 | — | — | — | — | — | r2 | — | — | — |\n\nFor example, parsing `acd$` gives:\n\n| State stack | Remaining input | Action |\n|---|---|---|\n| `0` | `acd$` | s1 |\n| `0 1` | `cd$` | s4 |\n| `0 1 4` | `d$` | r5: pop 4, push GOTO[1,A]=5 |\n| `0 1 5` | `d$` | s10 |\n| `0 1 5 10` | `$` | r1: pop 3 states, push GOTO[0,S]=3 |\n| `0 3` | `$` | accept |\n\nThere are **no conflicts**, hence the grammar is CLR(1). Its language consists exactly of `acd`, `bcd`, `ace`, `bce`. Exhaustively running the constructed table over all strings on {a,b,c,d,e} of length at most four accepts precisely those four.",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          655,
+          656,
+          660,
+          667,
+          668,
+          669,
+          694,
+          695,
+          700,
+          701,
+          702,
+          703
+        ]
+      }
+    ],
+    "warnings": [
+      "The table extends the supplied general LR/SLR construction to LR(1): reductions use item lookaheads, not the SLR FOLLOW rule on Rumi p700. State numbering is the one explicitly defined in 4(b)."
+    ],
+    "checks": [
+      "Programmatically constructed every ACTION/GOTO entry, checked that each cell has at most one action, and tested all 781 strings of length 0–4; exactly acd, ace, bcd, bce were accepted."
+    ]
+  },
+  {
+    "id": "2021-2022-a-4d",
+    "year": "2021-2022",
+    "section": "A",
+    "main": 4,
+    "part": "d",
+    "number": "4(d)",
+    "title": "How LR and LALR action sequences compare",
+    "topics": [
+      "LR parsing"
+    ],
+    "question": "Comment on the similarity and dissimilarity between the sequences of shifts and reductions for the LR and LALR parsers. **(5)**",
+    "solution": "Here **LR** means canonical LR(1). If the same grammar has conflict-free CLR and LALR tables, then on a **valid input** they perform the same shifts and reductions in the same order, hence reconstruct the same rightmost derivation in reverse. Their **state numbers/stacks differ**: LALR merges CLR states having the same LR(0) core and unions their lookahead sets, normally yielding many fewer states.\n\nFor **invalid input**, the CLR parser can signal an error where LALR performs additional reductions enabled by lookaheads imported from a merged state; LALR may therefore report the error later. Agreement on valid parses does not imply identical error behavior.\n\nMoreover, not every CLR grammar is LALR. In 4(b), CLR states I4 and I7 have common core `{A→c·, B→c·}` but exchanged d/e lookaheads. LALR merging gives both completed productions lookahead set `{d,e}`, creating reduce/reduce conflicts. Therefore this grammar has no deterministic conflict-free LALR table, and no unconditional claim about identical LR/LALR action sequences is valid for it. Merging CLR cores can introduce reduce/reduce conflicts; it does not introduce a new shift/reduce conflict in an otherwise conflict-free CLR(1) table.",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          652,
+          694,
+          695,
+          726
+        ]
+      }
+    ],
+    "warnings": [
+      "The source mentions the canonical/LALR methods but does not develop merging in detail. The distinction is justified by the explicit computed counterexample in 4(b)."
+    ],
+    "checks": [
+      "Merged the two computed equal-core CLR states and verified reduce/reduce conflicts on d and e."
+    ]
+  },
+  {
+    "id": "2021-2022-b-5a",
+    "year": "2021-2022",
+    "section": "B",
+    "main": 5,
+    "part": "a",
+    "number": "5(a)",
+    "title": "Attribute dependency graphs and evaluation order",
+    "topics": [
+      "Syntax-directed translation"
+    ],
+    "question": "What is a dependency graph in the context of Syntax-Directed Definition (SSD)? How is a dependency graph constructed? What is the application of a dependency graph? **(4+4+3=11)**",
+    "solution": "A **dependency graph** is a directed graph describing the data dependencies among **attribute instances of one particular parse tree**. Each attribute at each node occurrence is a separate vertex; two occurrences of the same grammar symbol/attribute are not the same vertex. An edge `u→v` means v's value requires u's value.\n\nConstruct it as follows:\n\n1. Build the parse tree and create a vertex for every relevant synthesized/inherited attribute at every node.\n2. At each production occurrence, instantiate its semantic rules using the actual parent/child occurrences.\n3. For each rule `v=f(u1,...,uk)`, add edges `u1→v`, …, `uk→v`. Lexical values are input attributes; constants require no incoming dependency edge. Retain additional sequencing dependencies if side-effecting actions require them.\n\nFor example, at an occurrence of `E→T F` with `F.a=E.a+T.b`, add vertices for these attributes and edges `E.a→F.a` and `T.b→F.a`. Both inputs must be available before F.a is computed.\n\n**Application:** Any topological order gives a legal attribute-evaluation schedule; an edge's source is evaluated before its destination. An acyclic finite graph has such an order. A cycle exposes circular dependencies for that parse tree and prevents ordinary one-way topological evaluation. The graph helps check semantic definitions and determine whether a traversal or parser-time evaluation strategy can supply every value when needed. One tree's acyclicity alone does not prove the SDD is acyclic for every possible tree.",
+    "sources": [
+      {
+        "doc": "kms",
+        "pages": [
+          23,
+          24,
+          25,
+          28,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35
+        ]
+      }
+    ],
+    "warnings": [
+      "The question prints SSD; the standard term in the supplied notes is SDD (Syntax-Directed Definition)."
+    ],
+    "checks": [
+      "Checked edge direction and topological-order criterion directly against KMS pp24–28."
+    ]
+  },
+  {
+    "id": "2021-2022-b-5b",
+    "year": "2021-2022",
+    "section": "B",
+    "main": 5,
+    "part": "b",
+    "number": "5(b)",
+    "title": "A non-left-recursive binary-value SDT",
+    "topics": [
+      "Syntax-directed translation",
+      "LL parsing"
+    ],
+    "question": "The following SDT computes the value of a string of 0's and 1's interpreted as a positive, binary integer. **(10)**\n```text\nB → B1 0 {B.val = 2 × B1.val}\n  | B1 1 {B.val = 2 × B1.val + 1}\n  | 1    {B.val = 1}\n```\nRewrite this SDT so that the underlying grammar is not left recursive, and yet the same value of B.val is computed for the entire input string.",
+    "solution": "Carry the value of the already read prefix as an **inherited accumulator**. R.in is that accumulator; R.out returns the final value. A subscript marks a child occurrence, not a different nonterminal.\n\n```text\nB → 1 { R.in = 1; }\n      R { B.val = R.out; }\n\nR → 0 { R1.in = 2 * R.in; }\n      R1 { R.out = R1.out; }\n\nR → 1 { R1.in = 2 * R.in + 1; }\n      R1 { R.out = R1.out; }\n\nR → ε { R.out = R.in; }\n```\n\nThe underlying grammar is simply `B→1R`, `R→0R | 1R | ε`, which has no left recursion and generates the same strings: a leading 1 followed by any number of bits.\n\n**Why the value is preserved:** Once prefix p is read, R.in equals its binary value v. Appending bit b changes it to `2v+b`, exactly the original semantic rule. When no bits remain, the ε action returns the accumulator, which propagates to B.val.\n\nFor `10110`, the accumulator after successive bits is `1 → 2 → 5 → 11 → 22`, so B.val=22. For the shortest string `1`, R immediately takes ε and returns 1. Actions setting R1.in occur **before** processing that child; moving all actions to the end would lose this intended evaluation order.",
+    "sources": [
+      {
+        "doc": "kms",
+        "pages": [
+          32,
+          34,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67
+        ]
+      }
+    ],
+    "warnings": [
+      "The original grammar disallows leading zeroes and zero itself; the rewritten grammar deliberately preserves that language."
+    ],
+    "checks": [
+      "Programmatically evaluated all 511 strings starting with 1 of lengths 1–9; the accumulator result equals their integer binary value in every case."
+    ]
+  },
+  {
+    "id": "2021-2022-b-5c",
+    "year": "2021-2022",
+    "section": "B",
+    "main": 5,
+    "part": "c",
+    "number": "5(c)",
+    "title": "L-attributed definitions on LR grammars",
+    "topics": [
+      "Syntax-directed translation",
+      "LR parsing",
+      "LL parsing"
+    ],
+    "question": "Give an example of an L-attributed SDD on an LR grammar. Is it possible to handle every LR grammar and L-attributed SDD bottom up? Give an intuitive argument in support of your answer. **(6+8=14)**",
+    "solution": "An example is a declaration grammar with a left-recursive identifier list:\n\n| Production | Semantic rules |\n|---|---|\n| `D→T L` | `L.in=T.type` |\n| `T→int` | `T.type=integer` |\n| `T→float` | `T.type=floating` |\n| `L→L1 , id` | `L1.in=L.in`; install `id.entry` with type `L.in` |\n| `L→id` | install `id.entry` with type `L.in` |\n\nT.type is synthesized and L.in is inherited. Every inherited attribute depends only on its parent's inherited attribute or a left sibling's available attribute, so this SDD is **L-attributed**. For `float x,y`, both identifiers receive floating type. The grammar is LR(1) (indeed the list reductions are decided by comma/end lookahead); its left recursion makes it unsuitable as an LL grammar in this form.\n\n**Not every L-attributed SDD on an LR grammar can be evaluated during an ordinary single bottom-up parse.** L-attributed restrictions guarantee a left-to-right **depth-first tree traversal** can evaluate attributes, but do not guarantee LR reductions know inherited attributes early enough.\n\nConsider an LR production `A→B C` with rule `B.in=f(A.in)`. Before or when B is reduced, the parser has not yet recognized C, so it may not know that this B belongs to this A-production rather than another context with different rules. Delaying until `BC→A` identifies the production may still leave A.in unknown: the enclosing production containing A may not yet be identified. Repeating this deferral can require waiting until the whole tree is known.\n\nThus a general solution is **parse first, build the tree, then evaluate** in a suitable traversal. This is still compatible with bottom-up syntax parsing, but is not universal on-the-fly attribute evaluation at reductions. In contrast, every S-attributed SDD on an LR grammar can be evaluated bottom up; L-attributed SDDs on LL grammars have the needed top-down context (and can be handled by suitably transformed bottom-up techniques). Special LR/L-attributed cases may also work; the answer is not that none can.",
+    "sources": [
+      {
+        "doc": "kms",
+        "pages": [
+          31,
+          32,
+          33,
+          34,
+          35,
+          78,
+          79,
+          80
+        ]
+      }
+    ],
+    "warnings": [
+      "“Handle bottom up” is interpreted as evaluate the translation during the parse; building the entire tree and evaluating afterward is always a distinct general strategy for an acyclic L-attributed SDD."
+    ],
+    "checks": [
+      "Checked all inherited dependencies in the example against the L-attributed restrictions and matched the deferral argument to KMS pp79–80."
+    ]
+  },
+  {
+    "id": "2021-2022-b-6a",
+    "year": "2021-2022",
+    "section": "B",
+    "main": 6,
+    "part": "a",
+    "number": "6(a)",
+    "title": "SSA: unique definitions and phi functions",
+    "topics": [
+      "Intermediate code",
+      "Code optimization"
+    ],
+    "question": "Illustrate two distinctive aspects that distinguish Static Single-Assignment (SSA) from three-address code. How does SSA facilitate code optimization? Explain with an example. **(8+5=13)**",
+    "solution": "SSA is a discipline that can be applied **to three-address code**; the two are not mutually exclusive formats. Its distinctive features are:\n\n1. **Every SSA name has exactly one static definition.** Reassigning source variable x creates new versions x1, x2, …, and each use explicitly names its reaching version. A definition inside a loop can execute repeatedly; “single” refers to one static definition site, not one dynamic execution.\n2. **Joins use φ-functions.** When different definitions can reach a join, `x3=φ(x1,x2)` selects the value corresponding to the predecessor edge taken. It is not an eager ordinary function evaluating both control paths. Loop headers can similarly merge an initial value and a back-edge value.\n\nExample:\n\n```text\nOrdinary TAC                 SSA\nx = 10                       x1 = 10\nx = 15                       x2 = 15\ny = x                        y1 = x2\n```\n\nIn SSA, x1 has no uses, so its assignment is immediately dead; propagation yields `y1=15` and permits removal of x2 if its value is no longer otherwise needed. The use-definition relation is explicit, simplifying constant/copy propagation, dead-code elimination, and related optimization analyses.\n\nAt a branch:\n\n```text\nif flag goto L1 else L2\nL1: x1 = -1; goto L3\nL2: x2 =  1; goto L3\nL3: x3 = φ(x1 from L1, x2 from L2)\n    y1 = x3 * a0\n```\n\nThere is no single constant for x3 here, because the incoming values differ. If both branches instead define 7, the φ result is constant 7 and `y1=7*a0` can be propagated/folded as applicable. SSA exposes this reasoning without repeatedly searching which assignment to the same unversioned x reaches each use.",
+    "sources": [
+      {
+        "doc": "kms",
+        "pages": [
+          116,
+          117
+        ]
+      }
+    ],
+    "warnings": [],
+    "checks": [
+      "Matched the two defining properties and dead-store example to KMS pp116–117; checked that the differing-value phi example is not incorrectly folded."
+    ]
+  },
+  {
+    "id": "2021-2022-b-6b",
+    "year": "2021-2022",
+    "section": "B",
+    "main": 6,
+    "part": "b",
+    "number": "6(b)",
+    "title": "Fall-through rules for AND and relational tests",
+    "topics": [
+      "Intermediate code",
+      "Control flow and backpatching",
+      "Syntax-directed translation"
+    ],
+    "question": "Consider this SDD for generating three-address code using the fall-through technique. **(14)**\n\nProduction: `S → if (B) S1`\n```text\nB.true = fall\nB.false = S1.next = S.next\nS.code = B.code || S1.code\n```\nProduction: `B → B1 || B2`\n```text\nB1.true = if B.true ≠ fall then B.true else newLabel()\nB1.false = fall\nB2.true = B.true\nB2.false = B.false\nB.code = if B.true ≠ fall then B1.code || B2.code\n         else B1.code || B2.code || label(B1.true)\n```\nAdd rules for **(i)** `B→B1 && B2` and **(ii)** `B→E1 rel E2`, using the same fall-through technique. All symbols, attributes, functions, labels and notations have their usual meanings.",
+    "solution": "Here `fall` means continue at the instruction immediately after this Boolean expression's code; `||` in code rules means concatenation.\n\n**(i) AND:** If B1 is true, evaluation must continue into B2. If B1 is false, it must skip B2; when the enclosing false target is fall, allocate a label after B2 to preserve that short circuit.\n\n```text\nB1.true  = fall\nB1.false = if B.false ≠ fall then B.false else newLabel()\nB2.true  = B.true\nB2.false = B.false\n\nB.code = if B.false ≠ fall\n         then B1.code || B2.code\n         else B1.code || B2.code || label(B1.false)\n```\n\nThis is the dual of the supplied OR rule. The new label belongs **after** B2, not before it; a false B1 must not execute B2.\n\n**(ii) Relational test:** First evaluate the operands in their required order:\n\n```text\nP = E1.code || E2.code\nC = (E1.addr rel E2.addr)\n```\n\nThen generate according to the two destinations:\n\n| B.true | B.false | B.code |\n|---|---|---|\n| explicit T | explicit F | `P || gen(if C goto T) || gen(goto F)` |\n| explicit T | fall | `P || gen(if C goto T)` |\n| fall | explicit F | `P || gen(ifFalse C goto F)` |\n| fall | fall | `P` (no branch needed) |\n\n`ifFalse C` denotes the **logical complement** of the relation's result. On ordinary totally ordered operands it can use the opposite relational operator, e.g. `<` becomes `>=`; with floating NaNs, implement the true logical complement rather than assuming such an operator substitution is always equivalent. Operand evaluation and observable effects must be preserved even if both results fall through.\n\nFor example, inside `if (x<y && p<q) S1`, use `B.true=fall`, `B.false=Lnext`. Each relation emits `ifFalse ... goto Lnext`. A false first test skips the second and S1; both true tests fall directly into S1.",
+    "sources": [
+      {
+        "doc": "kms",
+        "pages": [
+          165,
+          166,
+          167,
+          168,
+          169,
+          171,
+          173,
+          174,
+          175
+        ]
+      }
+    ],
+    "warnings": [
+      "The question supplies fall-through conventions; these rules are derived from them and the lecture short-circuit Boolean translation. ifFalse denotes actual Boolean negation, including floating comparison edge cases."
+    ],
+    "checks": [
+      "Checked all four destination combinations for a relation and all four Boolean-value combinations for short-circuit AND; verified the false-fall label is placed after B2."
+    ]
+  },
+  {
+    "id": "2021-2022-b-6c",
+    "year": "2021-2022",
+    "section": "B",
+    "main": 6,
+    "part": "c",
+    "number": "6(c)",
+    "title": "One-pass backpatching for a for loop",
+    "topics": [
+      "Control flow and backpatching",
+      "Intermediate code",
+      "Syntax-directed translation"
+    ],
+    "question": "Write a translation scheme for generating code using backpatching for the flow-of-control statement yielded by the following production. You may add marker symbols as required; specify their semantic actions. Make any other justified assumptions as necessary. **(8)**\n```text\nS → for (S1; B; S2) S3\n```",
+    "solution": "A for loop executes **S1 once; then repeatedly B, S3, S2**. Source order places S2 before S3, so one-pass emission must jump over the increment on the first true test and jump from the body back to it.\n\nUse this marked production:\n\n```text\nS → for ( S1 ; Mt B ; Mi S2 N ) Mb S3\n```\n\nAll marker names Mt, Mi, Mb are occurrences of the same marker kind:\n\n```text\nM → ε { M.instr = nextinstr; }\nN → ε {\n    N.nextlist = makelist(nextinstr);\n    emit(\"goto _\");\n}\n```\n\nAt the end of the S production execute:\n\n```text\nbackpatch(S1.nextlist, Mt.instr);\nbackpatch(B.truelist, Mb.instr);\nbackpatch(S2.nextlist, Mt.instr);\nbackpatch(N.nextlist, Mt.instr);\nbackpatch(S3.nextlist, Mi.instr);\nemit(\"goto \" + Mi.instr);\nS.nextlist = B.falselist;\n```\n\nThe emitted physical layout is:\n\n```text\n             code(S1)\nMt:          code(B)     /* true → Mb; false → loop exit */\nMi:          code(S2)\n             goto Mt    /* emitted by N */\nMb:          code(S3)\n             goto Mi    /* emitted by final action */\nexit:        ...        /* supplied by enclosing construct */\n```\n\nS1's natural fall-through already reaches Mt; pending normal-completion jumps are also patched there. B.true jumps over S2 to the body. Body fall-through reaches the final `goto Mi`, and body normal-completion jumps also target Mi. After the increment, N returns to the test. B.false is retained in S.nextlist so the enclosing sequence can patch the actual exit address later.\n\nAssume S1/S2 are the usual initialization/increment statements, B supplies explicit true/false jump lists, and nextlist represents normal completion. If break/continue are allowed in S3, keep separate lists: patch continue to Mi and merge the loop's break list into S.nextlist. An omitted test can be treated as an unconditional true jump. The scheme does not execute S2 before the first body iteration.",
+    "sources": [
+      {
+        "doc": "kms",
+        "pages": [
+          184,
+          185,
+          186,
+          187,
+          189,
+          190,
+          194,
+          195
+        ]
+      }
+    ],
+    "warnings": [
+      "This scheme assumes conventional for semantics and explicit Boolean truelist/falselist code. Marker-emission order is essential because increment code precedes body code physically."
+    ],
+    "checks": [
+      "Executed an interpreter for the init/test/increment/backjump/body/backjump layout with bounds 0, 1, and 3; body traces are respectively [], [0], [0,1,2]."
+    ]
+  },
+  {
+    "id": "2021-2022-b-7a",
+    "year": "2021-2022",
+    "section": "B",
+    "main": 7,
+    "part": "a",
+    "number": "7(a)",
+    "title": "Why stack allocation needs nested lifetimes",
+    "topics": [
+      "Runtime environments"
+    ],
+    "question": "Which condition must procedure calls or activations of procedure satisfy to enable stack allocation? Explain. Give an example of a programming language feature that violates the condition and thus cannot be implemented with purely a runtime stack. What are calling and return sequences in the context of procedure calls? **(6+6+5=17)**",
+    "solution": "**The condition is last-in, first-out nesting in time.** If activation `P` calls activation `Q`, `Q` must finish before `P` finishes. At each instant, live ordinary activations form one root-to-current-node path in the activation tree. The most recently entered live activation is therefore the first one whose frame can be removed. Recursion satisfies this condition: different recursive calls have different frames, and they return in reverse order.\n\nFor example:\n\n```text\ncall main → call P → call Q → return Q → return P → return main\nstack:          [main,P]  [main,P,Q]     [main,P]     [main]\n```\n\nA frame also cannot be popped while data that must remain accessible still resides exclusively in it.\n\n**A feature requiring more than a single ordinary runtime stack:** an escaping closure can retain an outer procedure's local variables after that procedure has returned.\n\n```python\ndef make_counter():\n    n = 0\n    def next_value():\n        nonlocal n\n        n += 1\n        return n\n    return next_value\n\nf = make_counter()  # make_counter returns\nf()                 # still needs its n: returns 1\nf()                 # the same retained n: returns 2\n```\n\nThe `make_counter` activation has ended, yet its environment must survive. Popping its frame and reusing all its storage would destroy `n`. Keep the escaping environment in the heap (or another storage scheme with the required lifetime). Ordinary calls may still use a stack; the claim is that **all required storage cannot be managed by that stack alone**. Coroutines/generators provide the notes' other example: suspended execution states may be resumed or destroyed in an order that a single LIFO control stack cannot represent. An implementation can use separate stacks or heap-allocated continuation frames.\n\n**Calling sequence:** generated caller/callee code that establishes a call. Typically the caller evaluates and passes arguments, records the return address and caller frame/stack state, and transfers control; the callee saves required machine state, allocates/initializes local storage, and begins its body. The exact division depends on the calling convention.\n\n**Return sequence:** generated code that places the result where the caller expects it, restores saved registers/frame/stack state, removes the callee's frame, and branches to the saved return address so execution continues after the call. The caller then obtains the result. These actions make the stack operations implement the nested call/return lifetime discipline.",
+    "sources": [
+      {
+        "doc": "kms",
+        "pages": [
+          210,
+          211,
+          215,
+          217,
+          220,
+          221,
+          226,
+          227,
+          230
+        ]
+      }
+    ],
+    "warnings": [],
+    "checks": [
+      "Checked the nested-call condition against KMS pp210–211 and distinguished a closure environment lifetime from the completed call itself."
+    ]
+  },
+  {
+    "id": "2021-2022-b-7b",
+    "year": "2021-2022",
+    "section": "B",
+    "main": 7,
+    "part": "b",
+    "number": "7(b)",
+    "title": "Cheney collection: queue order, addresses, and updated pointers",
+    "topics": [
+      "Garbage collection",
+      "Runtime environments"
+    ],
+    "question": "Consider the network of objects in the figure below. Assume, X denotes the root set. Suppose at some point in time, the pointer `A → C` is deleted. Then we execute Cheney's copying garbage collection algorithm on the network. Also, suppose that, **(18)**\n\n(i) Each object has size 100 bytes,\n\n(ii) The unscanned list is managed as a queue, and when an object has more than one pointer, the reached objects are added to the queue in alphabetical order,\n\n(iii) The From semispace starts at location 0, and the To semispace starts at location 10,000, and\n\n(iv) Initially, all the objects in the heap are arranged in alphabetical order starting at byte 0.\n\nWhat is the value of `NewLoction(o)` for each object o that remains after garbage collection? Draw the heaps before and after running garbage collection, showing- (i) locations of the allocated objects, (ii) references running among the objects. What is the time complexity of the algorithm?\n\n> **Transcription note:** The function name in this question is printed `NewLoction(o)`.\n\n\n**Figure for Question 7(b) - directed object network before the specified deletion**\n\nRoot set: `X`. Objects: `A, B, C, D, E, F, G, H, I`.\n\n```mermaid\nflowchart TD\n    X[X] --> A((A))\n    A --> B((B))\n    A --> C((C))\n    B --> D((D))\n    B --> E((E))\n    C --> E\n    C --> F((F))\n    D --> G((G))\n    G --> E\n    E --> H((H))\n    F --> H\n    G --> I((I))\n    H --> I\n```",
+    "solution": "Delete **only `A → C`** before tracing. The root `X` still points to `A`. Follow all remaining edges, including the easily missed **`G → E`** edge:\n\n```text\nX → A → B\nB → D, E\nD → G\nE → H\nG → E, I\nH → I\n```\n\nThus the reachable objects are `{A,B,D,E,G,H,I}`; `C` and `F` are garbage. Their outgoing edges do not make them reachable, because reachability starts at roots and follows pointer directions.\n\n**Heap before collection (after the deletion).** Each object occupies 100 bytes. A row gives its start address and pointer-valued fields; `X` is a root slot outside these nine heap objects.\n\n| Object | From address | Outgoing references before collection |\n| --- | --- | --- |\n| A | 0 | B at 100 |\n| B | 100 | D at 300; E at 400 |\n| C | 200 | E at 400; F at 500 (C is unreachable) |\n| D | 300 | G at 600 |\n| E | 400 | H at 700 |\n| F | 500 | H at 700 (F is unreachable) |\n| G | 600 | E at 400; I at 800 |\n| H | 700 | I at 800 |\n| I | 800 | none |\n\nInitially `X=0`, `unscanned=free=10000`. Copying the root target installs `A` at 10000, changes `X` to 10000, and advances `free` to 10100. First discoveries enter the queue in alphabetical order; repeated references use the existing forwarding address.\n\n| Scanned object | Newly copied objects, in order | Queue still unscanned after this step | free |\n| --- | --- | --- | --- |\n| root initialization | A at 10000 | A | 10100 |\n| A | B at 10100 | B | 10200 |\n| B | D at 10200; E at 10300 | D, E | 10400 |\n| D | G at 10400 | E, G | 10500 |\n| E | H at 10500 | G, H | 10600 |\n| G | I at 10600 (E already forwarded) | H, I | 10700 |\n| H | none (I already forwarded) | I | 10700 |\n| I | none | empty | 10700 |\n\n**Final `NewLocation` values and heap.** This is the intended meaning of the exam's printed `NewLoction`.\n\n| Object | NewLocation | Updated outgoing references |\n| --- | --- | --- |\n| A | 10000 | B = 10100 |\n| B | 10100 | D = 10200; E = 10300 |\n| D | 10200 | G = 10400 |\n| E | 10300 | H = 10500 |\n| G | 10400 | E = 10300; I = 10600 |\n| H | 10500 | I = 10600 |\n| I | 10600 | none |\n\n`C` and `F` have no copied address. `X=10000`; the occupied To-space interval is `[10000,10700)`, and `unscanned=free=10700` at termination. The remaining To space is free. The semispaces exchange roles, so the old From space becomes available for later allocation; its old bytes need not be physically zeroed.\n\n**Cost:** the standard Cheney implementation copies each reachable object once and scans its fields once. Its cost is `Θ(live bytes + root slots + scanned pointer fields)`, conventionally described by these notes as proportional to total reached-object size. With these fixed-size, bounded-field objects it is `Θ(R)` for `R` reachable objects. An equally sized spare semispace is required, but the copied interval between `unscanned` and `free` is itself the queue, avoiding a separate unbounded work-stack. If an implementation first resets forwarding metadata for every allocated From object, add that full-heap initialization cost; it is not necessary in the standard forwarding-pointer formulation.",
+    "sources": [
+      {
+        "doc": "kms",
+        "pages": [
+          252,
+          253,
+          254,
+          279,
+          285,
+          286,
+          287,
+          288,
+          289,
+          290,
+          291,
+          292,
+          293
+        ]
+      }
+    ],
+    "warnings": [
+      "The graph must retain G → E. Treat X as a root slot, not as a tenth 100-byte heap object."
+    ],
+    "checks": [
+      "Independently traversed the graph and reproduced FIFO discovery A,B,D,E,G,H,I; checked all 7 forwarding addresses and all rewritten reference fields."
+    ]
+  },
+  {
+    "id": "2021-2022-b-8a",
+    "year": "2021-2022",
+    "section": "B",
+    "main": 8,
+    "part": "a",
+    "number": "8(a)",
+    "title": "Dot-product loop: common expressions and induction variables",
+    "topics": [
+      "Code optimization",
+      "Intermediate code"
+    ],
+    "question": "Optimize the following three-address code by eliminating common subexpressions, performing reduction in strength on induction variables, and eliminating all the induction variables as possible. **(10)**\n\n```text\ndp = 0\ni = 0\nL: t1 = i * 8\n   t2 = A[t1]\n   t3 = i * 8\n   t4 = B[t3]\n   t5 = t2 * t4\n   dp = dp + t5\n   i = i + 1\n   if i < n goto L\n```",
+    "solution": "The repeated expression is `i*8`: `t1` and `t3` are equal before any intervening change to `i`. Reuse `t1` for both array offsets:\n\n```text\ndp = 0\ni = 0\nL: t1 = i * 8\n   t2 = A[t1]\n   t4 = B[t1]\n   t5 = t2 * t4\n   dp = dp + t5\n   i = i + 1\n   if i < n goto L\n```\n\nThis is **common subexpression elimination**, followed by removal of the redundant temporary/copy. Since `i` increases by one, the derived induction expression `8*i` increases by eight. Introduce a running byte offset `p`, initialize it to zero, and update it by addition rather than multiplying inside the loop. The bound `8*n` is loop invariant and can be computed once.\n\nAssuming only `dp` is needed after the loop, a complete result is:\n\n```text\ndp = 0\np = 0\nlimit = 8 * n\nL: t2 = A[p]\n   t4 = B[p]\n   t5 = t2 * t4\n   dp = dp + t5\n   p = p + 8\n   if p < limit goto L\n```\n\nThe steps are:\n\n1. **Strength reduction:** replace repeated `i*8` with the recurrence `p←p+8`.\n2. **Loop-invariant code motion:** compute `limit=8*n` before the loop.\n3. **Induction-variable elimination:** replace `i<n` with `p<limit`, then remove `i` and its increment if its final value is dead. At corresponding loop entries the invariant is `p=8*i`; multiplying an integer comparison by positive 8 preserves its direction under the stated arithmetic assumptions.\n\nThe remaining `p` is still an induction variable: at least one progressing loop-control/address value is needed. “Eliminate all … as possible” means remove redundant induction variables, not every value that changes with the iteration. If the final `i` is required, restore it once after the loop as `i=p/8` (exact division here), or retain its increment.\n\n**Boundary and semantic details:** the source is a bottom-tested loop. It executes once even when `n≤0`. The result above also enters the body unconditionally and therefore preserves that behavior; replacing it by a conventional pretested `for(i=0;i<n;i++)` would change those cases. With `n>0`, it computes `Σ(k=0..n−1) A[8k]*B[8k]`; with `n≤0`, it computes the single product at offset 0. Array element access and addition/multiplication order are unchanged.",
+    "sources": [
+      {
+        "doc": "kms",
+        "pages": [
+          330,
+          331,
+          335,
+          337,
+          339,
+          340
+        ]
+      }
+    ],
+    "warnings": [
+      "Assume n is invariant; A/B are valid nonvolatile arrays and scalar bookkeeping does not alias them. Arithmetic for offsets/bounds must not overflow (or must be proven safe). Only dp is assumed live on exit; a live i must be restored as described."
+    ],
+    "checks": [
+      "Compared original and transformed TAC on 2,400 randomized integer-array cases with n from −2 through 12, preserving dp and the original bottom-tested iteration count."
+    ]
+  },
+  {
+    "id": "2021-2022-b-8b",
+    "year": "2021-2022",
+    "section": "B",
+    "main": 8,
+    "part": "b",
+    "number": "8(b)",
+    "title": "Global allocation: liveness, the K6 interference graph, and spills",
+    "topics": [
+      "Register allocation",
+      "Liveness analysis"
+    ],
+    "question": "Given the flow graph of a program, formulate the problem of global register allocation as a graph coloring problem. Show detailed formulation steps using the flow graph in the figure below as an example. Subsequently, find a register allocation for the given program using Chaitin's algorithm. Assume that three physical registers are available. Illustrate all steps of the algorithm. **(13+12=25)**\n\n**Figure for Question 8(b) - block contents**\n\n```text\nB1:\n    a = b + c\n    d = d - b\n    e = a + f\n\nB2:\n    f = a - d\n\nB3:\n    b = d + f\n    e = a - c\n\nB4:\n    b = d + c\n```\n\n```mermaid\nflowchart TD\n    Entry --> B1\n    B1 --> B2\n    B1 --> B3\n    B2 --> B4\n    B3 --> B4\n    B4 --> Exit[\"b, e live\"]\n```\n\n**Directed flow edges:** `Entry → B1`, `B1 → B2`, `B1 → B3`, `B2 → B4`, `B3 → B4`, `B4 → Exit`.\n\nAt exit: **b, e live**.",
+    "solution": "Use **one vertex for each unsplit source variable** `{a,b,c,d,e,f}`, as in KMS p437. Two vertices interfere when their values must coexist at a program point, so adjacent vertices must receive different register colors. Exactly `b,e` are live at the program exit.\n\n**1. Compute block use/def and solve liveness.** `USE` means read before any definition in that block. Iterate `OUT[B]=⋃ IN[successor]` and `IN[B]=USE[B] ∪ (OUT[B]−DEF[B])` to a fixed point.\n\n| Block | USE | DEF | IN | OUT |\n| --- | --- | --- | --- | --- |\n| B1 | b,c,d,f | a,d,e | b,c,d,f | a,c,d,e,f |\n| B2 | a,d | f | a,c,d,e | c,d,e |\n| B3 | a,c,d,f | b,e | a,c,d,f | c,d,e |\n| B4 | c,d | b | c,d,e | b,e |\n\n**2. Inspect internal program points as well.** Block boundaries alone miss some edges. Working backward within blocks gives:\n\n| Instruction | Live before | Live after |\n| --- | --- | --- |\n| B1: a=b+c | b,c,d,f | a,b,c,d,f |\n| B1: d=d−b | a,b,c,d,f | a,c,d,f |\n| B1: e=a+f | a,c,d,f | a,c,d,e,f |\n| B2: f=a−d | a,c,d,e | c,d,e |\n| B3: b=d+f | a,c,d,f | a,c,d |\n| B3: e=a−c | a,c,d | c,d,e |\n| B4: b=d+c | c,d,e | b,e |\n\nFor example, immediately after `a=b+c`, `a,b,c,d,f` coexist. Immediately after `e=a+f`, `a,c,d,e,f` coexist. The exit set supplies the remaining `b−e` pair. The resulting RIG is therefore **K6**, with all 15 edges:\n\n```text\nab ac ad ae af\n   bc bd be bf\n      cd ce cf\n         de df\n            ef\n```\n\nEvery initial degree is 5. K6 needs six colors if no variable is split/spilled; with only three colors, at least three of these whole-variable vertices must spill.\n\n**3. A complete optimistic Chaitin run (`K=3`).** Choose `c,e,f` as the troublesome candidates, then simplify the remaining triangle. A star means “potential spill,” not an immediate spill.\n\n| Removal order | Current degree | Action |\n| --- | --- | --- |\n| c | 5 | mark c*, remove |\n| e | 4 | mark e*, remove |\n| f | 3 | mark f*, remove |\n| a | 2 | simplify |\n| b | 1 | simplify |\n| d | 0 | simplify |\n\nReinsert in reverse order:\n\n| Vertex | Result |\n| --- | --- |\n| d | R1 |\n| b | R2 |\n| a | R3 |\n| f | neighbors a,b,d use all three colors: spill |\n| e | neighbors a,b,d use all three colors: spill |\n| c | neighbors a,b,d use all three colors: spill |\n\nThis produces `d→R1`, `b→R2`, `a→R3`, and memory locations for `c,e,f`. The particular spill choice is not unique; a real cost heuristic weights uses, loop nesting and reload/store cost. After rewriting spills, recompute liveness/RIG for the new short-lived reload temporaries rather than treating a spilled value as permanently occupying a register.\n\n**4. Show that the spills can be executed with three registers.** Here `LD R,x`, `ST x,R` and three-register arithmetic use the lecture's simple-machine style. The original B1 branch decision is retained; its predicate is not specified in the given flow graph.\n\n```text\nB1:\n    LD  R2, b\n    LD  R1, c\n    ADD R3, R2, R1       // a = b + c\n    LD  R1, d\n    SUB R1, R1, R2       // d = old d - old b\n    LD  R2, f           // old b is now dead\n    ADD R2, R3, R2       // e = a + f\n    ST  e, R2\n    branch as in original graph to B2 or B3\n\nB2:\n    SUB R2, R3, R1       // f = a - d\n    ST  f, R2\n    goto B4\n\nB3:\n    LD  R2, f\n    ADD R2, R1, R2       // b = d + f\n    LD  R2, c           // that b is dead before B4 redefines it\n    SUB R2, R3, R2       // e = a - c\n    ST  e, R2\n    goto B4\n\nB4:\n    LD  R2, c\n    ADD R2, R1, R2       // b = d + c\n    ST  b, R2\n```\n\nAt exit, both required values `b,e` are in memory. This explicit code also illustrates why scratch registers may be reused after their current values die even though the global unsplit-name coloring was conservative. The dead B3 assignment to `b` could be removed by a separate dead-code pass, and value splitting can reduce interference further; neither change is silently assumed in the K6 construction.",
+    "sources": [
+      {
+        "doc": "kms",
+        "pages": [
+          332,
+          333,
+          346,
+          348,
+          351,
+          355,
+          356,
+          437,
+          440,
+          471,
+          530,
+          531
+        ]
+      }
+    ],
+    "warnings": [
+      "The allocation uses one RIG node per whole unsplit variable and the figure’s exact live-out set {b,e}. SSA/version splitting or prior dead-code elimination changes this graph and may change the spill count. The source graph does not specify its branch condition; retain its original branch."
+    ],
+    "checks": [
+      "Independent backward-liveness computation confirmed all eight instruction boundaries and K6’s 15 edges. Checked the shown spill code against both paths on 2,000 randomized inputs, preserving required exit b/e."
+    ]
+  }
+]

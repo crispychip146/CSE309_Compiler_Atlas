@@ -1,0 +1,736 @@
+[
+  {
+    "id": "2019-2020-a-1",
+    "year": "2019-2020",
+    "section": "A",
+    "main": 1,
+    "part": "",
+    "number": "1",
+    "title": "Line control and source locations",
+    "topics": [
+      "Compiler pipeline"
+    ],
+    "question": "Explain the concept of “Line Control Directive” in compilation with necessary examples. **(15)**",
+    "solution": "A line control directive tells later translation stages which **logical file name and line number** to associate with subsequent source text. This matters after a preprocessor inserts headers, expands macros, or a source generator emits another language: diagnostics should refer to the programmer's original source location.\n\nIn C/C++ the usual form is:\n\n```c\n#line 200 \"original.c\"\nint x = missing_name;   // logically original.c:200\n```\n\nThe directive itself is not a runtime instruction. The following line is numbered 200; later lines increase normally. `#line 50` changes the line number while retaining the current logical file name. It also affects the values supplied by `__LINE__` and `__FILE__`.\n\nFor example, a translator from a template language can emit:\n\n```c\n#line 18 \"invoice.template\"\nrender(customer);\n#line 230 \"generated.c\"\ncleanup();\n```\n\nAn error on the first statement can then be reported against template line 18, and later generated code resumes its own numbering. A preprocessor also emits line markers on entering and leaving included files. Thus preprocessing can rearrange the physical text while line control preserves useful source provenance for compilation and debugging.\n\nThe supplied notes list line control among the C preprocessor's responsibilities (Rumi PDF p32); the directive syntax and worked examples here elaborate that listed concept.",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          31,
+          32,
+          33
+        ]
+      }
+    ],
+    "warnings": [],
+    "checks": [
+      "Checked that #line applies to the following line and distinguishes logical source location from runtime execution."
+    ]
+  },
+  {
+    "id": "2019-2020-a-2",
+    "year": "2019-2020",
+    "section": "A",
+    "main": 2,
+    "part": "",
+    "number": "2",
+    "title": "Linking relocatable object modules",
+    "topics": [
+      "Linking and loading",
+      "Compiler pipeline"
+    ],
+    "question": "Elaborate the role of a linker in compilation with reference to the relocatable machine code. **(15)**",
+    "solution": "The assembler usually produces **relocatable object code**, whose final placement and some external symbol addresses are still unknown. An object file therefore contains code/data sections, symbol definitions and unresolved references, and relocation records identifying address-dependent fields.\n\nThe linker combines object modules and selected library members into an executable (or another relocatable output). It:\n\n1. Lays out and combines the input code/data sections, accounting for alignment.\n2. Builds a global symbol map: a reference to `f` in one module is matched with the definition of `f` in another module/library. Missing or multiply defined symbols are diagnosed as appropriate.\n3. Relocates address-dependent instructions and data by applying the recorded fixups using the chosen section bases and resolved symbol addresses.\n4. Writes the linked program with its entry point and the information needed by the loader or dynamic linker.\n\nExample: module P contains a call to external `f`; module Q defines `f` at offset 24 in Q's text section. If Q's text is placed at address 1000, the linker resolves `f` to 1024 and patches P's call according to the machine's relocation rule. For an absolute local address at offset 12, placing that module at 2000 changes the reference to 2012. PC-relative relocations instead use the distance from the referring instruction; not every numeric constant or every instruction is changed.\n\nThe notes' example relocates a reference to local statement ST from location 5 to location 125 when the module is placed at 120 (Rumi PDF pp49–51). If loading later places the module at 300, the same target becomes 305 (pp52–53). A loader maps the executable into memory, and may apply the remaining load-time relocations. The linker resolves and combines modules; loading creates the process's memory image.",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          43,
+          45,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53
+        ]
+      }
+    ],
+    "warnings": [],
+    "checks": [
+      "Checked the notes’ ST offsets: 120+5=125 and 300+5=305; distinguished relocation fields from ordinary constants."
+    ]
+  },
+  {
+    "id": "2019-2020-a-3",
+    "year": "2019-2020",
+    "section": "A",
+    "main": 3,
+    "part": "",
+    "number": "3",
+    "title": "Operator tokens and attributes",
+    "topics": [
+      "Lexical analysis",
+      "LL parsing",
+      "LR parsing"
+    ],
+    "question": "Explain clearly, the relative merits and demerits of using: **(7+8)**\n\ni. The same token with appropriate attributes for the comparison operators `<`, `≤`, `>`, `≥`, `≠`, and `==`.\n\nii. The same token with appropriate attributes for the arithmetic operators `+`, `-`, `×`, and `÷`.",
+    "solution": "A token is a pair `⟨token-name, attribute⟩`. The parser normally branches on the **token name**; the attribute carries additional information for semantic analysis/code generation.\n\n**(i) Comparison operators.** Returning `⟨relop, LT⟩`, `⟨relop, LE⟩`, …, `⟨relop, EQ⟩` is convenient if the language treats these operators as one syntactic class. A rule such as `B → E relop E` needs only one terminal and one family of parser actions. The semantic action reads the attribute to emit `<`, `<=`, `>`, `>=`, `!=`, or `==`, and error reporting can recover the actual operator.\n\nThis simplifies the token interface, grammar, and often the parsing table. The cost is that semantic routines must inspect the attribute, and syntactic differences cannot be expressed by ordinary token-name-based parser decisions. In a language such as C where equality and ordered comparisons have different precedence, putting all six in one token would hide information required by a conventional precedence grammar. In that case split them into appropriate syntactic classes or use a parser explicitly designed to inspect attributes.\n\n**(ii) Arithmetic operators.** A single token `⟨arithop, PLUS|MINUS|TIMES|DIVIDE⟩` also reduces the number of token names and permits common semantic routines. However, `+`/`-` and `*`/`/` normally have **different precedence**. A grammar `E → E arithop E | id` cannot use the token name to enforce that `a+b*c` means `a+(b*c)`. Operator attributes do not automatically fix that ambiguity in an LL/LR table.\n\nA practical compromise is:\n\n```text\nE → E addop T | T      addop attributes: PLUS, MINUS\nT → T mulop F | F      mulop attributes: TIMES, DIVIDE\nF → (E) | id\n```\n\nOperators of a common precedence/associativity share a token; the attribute identifies the operation. Separate token names are preferable whenever syntax, precedence declarations, associativity, or diagnostics need to distinguish them directly. Unary operators also require their syntactic role to be represented correctly.",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          146,
+          156,
+          157,
+          184,
+          185,
+          187,
+          192,
+          369
+        ]
+      }
+    ],
+    "warnings": [
+      "A common relop token assumes the comparison operators share a syntactic role; the six listed comparisons do not all have the same precedence in every programming language."
+    ],
+    "checks": [
+      "Used a+b*c as the concrete precedence counterexample and checked that addop/mulop separation restores the standard two precedence levels."
+    ]
+  },
+  {
+    "id": "2019-2020-a-4a",
+    "year": "2019-2020",
+    "section": "A",
+    "main": 4,
+    "part": "a",
+    "number": "4(a)",
+    "title": "Why predictive parsing needs no backtracking",
+    "topics": [
+      "LL parsing",
+      "FIRST and FOLLOW"
+    ],
+    "question": "Elucidate how predictive parsers ensure that backtracking is avoided. **(10)**",
+    "solution": "For an LL(1) grammar, the current nonterminal `A` and one lookahead token `a` determine **at most one** production. The predictive table `M[A,a]` therefore contains either the unique rule or an error. The parser selects that rule directly; it never tries an alternative and later rewinds the input.\n\nFor alternatives `A → α | β`, their nonempty FIRST sets must not overlap. If an alternative can derive ε, its choice is controlled by FOLLOW(A); its SELECT set must not overlap another alternative's SELECT set. In table form:\n\n```text\nSELECT(A → α) = FIRST(α) − {ε}\n               ∪ FOLLOW(A), if ε ∈ FIRST(α)\n```\n\nThe SELECT sets for distinct productions of the same head must be disjoint. For example, `stmt → if … | while … | { … }` is selected immediately by `if`, `while`, or `{`. After selection, terminals are matched and nonterminals expanded from left to right. A mismatch is an error rather than an invitation to retry another rule. Left recursion and conflicting common prefixes must be removed where a suitable LL grammar can be obtained; an arbitrary context-free grammar is not automatically predictive.",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          304,
+          305,
+          316,
+          319,
+          443,
+          445,
+          446,
+          449,
+          450,
+          451,
+          452,
+          457
+        ]
+      }
+    ],
+    "warnings": [],
+    "checks": [
+      "Verified that the selection rule covers both FIRST/FIRST and FIRST/FOLLOW conflicts."
+    ]
+  },
+  {
+    "id": "2019-2020-a-4b",
+    "year": "2019-2020",
+    "section": "A",
+    "main": 4,
+    "part": "b",
+    "number": "4(b)",
+    "title": "When to select an epsilon production",
+    "topics": [
+      "LL parsing",
+      "FIRST and FOLLOW"
+    ],
+    "question": "Write down the rule for using the “ε-productions” in predictive parsing. **(5)**",
+    "solution": "Use `A → ε` when the lookahead belongs to **FOLLOW(A)** (including `$` when `$ ∈ FOLLOW(A)`), so that the next token can legally follow A without A consuming input. More generally, if `A → α` can derive ε, put that rule in `M[A,b]` for each `b ∈ FOLLOW(A)`.\n\nFor example:\n\n```text\nE′ → + T E′ | ε       FOLLOW(E′) = { ), $ }\n```\n\nOn `+`, choose the nonempty rule. On `)` or `$`, choose ε, pop E′, and leave the input unchanged. On an unrelated token, report an error.\n\nRumi PDF pp320/325 describe ε as the default when no other alternative applies. The precise table-construction rule in pp451–452 restricts this default to FOLLOW(A); “no other FIRST match” alone must not cause every invalid token to be accepted. If ε and a nonempty alternative compete for the same table entry, the grammar is not LL(1).",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          320,
+          325,
+          451,
+          452,
+          456
+        ]
+      }
+    ],
+    "warnings": [],
+    "checks": [
+      "Cross-checked the informal default rule against the formal FOLLOW-based predictive-table construction."
+    ]
+  },
+  {
+    "id": "2019-2020-a-5",
+    "year": "2019-2020",
+    "section": "A",
+    "main": 5,
+    "part": "",
+    "number": "5",
+    "title": "Remove direct and indirect left recursion",
+    "topics": [
+      "LL parsing"
+    ],
+    "question": "Eliminate left recursion from the following grammar: **(15)**\n\n```text\nX → XSb | Sa | b\nS → Sb | Xa | a\n```\n\nYou need to show the steps.",
+    "solution": "Choose the nonterminal order **X, S**. First remove the immediate left recursion from X:\n\n```text\nX  → X S b | S a | b\n\nX  → S a X′ | b X′\nX′ → S b X′ | ε\n```\n\nNow substitute these X alternatives in `S → S b | X a | a`:\n\n```text\nS → S b | (S a X′ | b X′) a | a\n  → S b | S a X′ a | b X′ a | a\n```\n\nThe left-recursive suffixes are `b` and `a X′ a`, while the non-left-recursive alternatives are `b X′ a` and `a`. Eliminating this immediate recursion gives the final grammar:\n\n```text\nX  → S a X′ | b X′\nX′ → S b X′ | ε\nS  → b X′ a S′ | a S′\nS′ → b S′ | a X′ a S′ | ε\n```\n\nBoth original nonterminals retain their languages. There is no remaining left recursion: every nonempty S-production and every nonempty S′-production starts with a terminal; X and X′ can begin with S, but S cannot return to them without first consuming a terminal. Only removing the original direct recursions would have left the indirect cycle `X ⇒ S a ⇒ X a a` unresolved.",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          367,
+          368,
+          370,
+          371,
+          372,
+          400
+        ]
+      }
+    ],
+    "warnings": [],
+    "checks": [
+      "A fixed-point bounded-language computation compared the original and transformed languages of both X and S for every terminal string of length at most 8; the sets agree.",
+      "Checked the nullable-aware left-corner relation of the transformed grammar for cycles; none remain."
+    ]
+  },
+  {
+    "id": "2019-2020-a-6a",
+    "year": "2019-2020",
+    "section": "A",
+    "main": 6,
+    "part": "a",
+    "number": "6(a)",
+    "title": "Single input buffer versus buffer pairs",
+    "topics": [
+      "Lexical analysis"
+    ],
+    "question": "Discuss the relative advantages and disadvantages of using single buffer instead of using buffer pairs in lexical analysis. **(6)**",
+    "solution": "A **single block buffer** uses less memory (about N bytes rather than 2N), is simpler to manage, and is adequate when lexemes/lookahead are small or the environment already provides buffering. It can still read a whole block per system call; a single buffer does not inherently imply one read call per character.\n\nIts main difficulty is a token crossing the refill boundary. Reloading the same buffer can overwrite the beginning of the unfinished lexeme or characters needed for retraction. The scanner must copy the unfinished part aside, shift it before refilling, or use another preservation mechanism. This adds copying, bookkeeping, and often extra boundary checks. Arbitrarily long lexemes require additional handling in either design.\n\nWith **buffer pairs**, each half has N characters and the halves are reloaded alternately. `lexemeBegin` can stay in one half while `forward` continues into the other. This naturally accommodates a boundary-crossing lexeme and limited retraction, reducing copying and allowing block reads. The cost is extra memory and refill/sentinel management.\n\nThe notes' guarantee is bounded: the lexeme length plus the lookahead distance must not exceed N, otherwise even a pair may overwrite needed characters. Sentinels can combine the common end-of-buffer and input-character tests, reducing scanning overhead; a real EOF must still be distinguished from an internal buffer boundary.",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          167,
+          168,
+          169,
+          170,
+          171,
+          172,
+          173,
+          174
+        ]
+      }
+    ],
+    "warnings": [],
+    "checks": [
+      "Preserved the N-character lookahead/lexeme bound from p174 and avoided equating single-buffer input with unbuffered character reads."
+    ]
+  },
+  {
+    "id": "2019-2020-a-6b",
+    "year": "2019-2020",
+    "section": "A",
+    "main": 6,
+    "part": "b",
+    "number": "6(b)",
+    "title": "LL(1) conflicts are local to one nonterminal",
+    "topics": [
+      "LL parsing",
+      "FIRST and FOLLOW"
+    ],
+    "question": "Consider the two grammars given below. **(9)**\n\n**Grammar 1**\n\n```text\nA → aA | bd\nB → aB | cc\n```\n\n**Grammar 2**\n\n```text\nA → aA | ad\nB → bB | cc\n```\n\nBoth of the above mentioned grammars have at least two bodies of the production rules beginning with an a. Explain in detail with proper justifications why one of the grammars is LL(1) while the other is not.",
+    "solution": "LL(1) compares alternatives **of the same head**, not every pair of productions in the grammar.\n\nFor Grammar 1:\n\n| Head | Alternative | FIRST |\n|---|---|---|\n| A | aA | {a} |\n| A | bd | {b} |\n| B | aB | {a} |\n| B | cc | {c} |\n\nThere are no ε-productions. In row A, lookahead `a` chooses `A → aA`, and `b` chooses `A → bd`. In row B, `a` chooses `B → aB`, and `c` chooses `B → cc`. Thus each row has no conflict. Seeing `a` is harmless because the stack already tells the parser whether it is expanding A or B. The languages are `L(A) = {aⁿbd : n ≥ 0}` and `L(B) = {aⁿcc : n ≥ 0}`.\n\nFor Grammar 2:\n\n| Head | Alternative | FIRST |\n|---|---|---|\n| A | aA | {a} |\n| A | ad | {a} |\n| B | bB | {b} |\n| B | cc | {c} |\n\n`M[A,a]` would contain **both** A-productions. At A, a single `a` cannot say whether another A follows or whether this is the final `ad`. Hence the given Grammar 2 is not LL(1), even though its language can be described by a factored LL(1) grammar, e.g. `A → aR; R → A | d`.\n\nNo start symbol is supplied. The comparison treats the displayed nonterminals as parsing contexts (or each as a possible entry nonterminal). Adding an unstated `S → A | B` would introduce another decision and could change LL(1) status; it must not be silently assumed.",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          319,
+          443,
+          445,
+          446,
+          451,
+          452,
+          457
+        ]
+      }
+    ],
+    "warnings": [
+      "The question supplies no start production. The LL(1) comparison concerns the alternatives for A and B as written; no extra S→A|B is assumed."
+    ],
+    "checks": [
+      "Computed the four FIRST sets in each grammar and located the sole displayed-table conflict at Grammar 2, M[A,a]."
+    ]
+  },
+  {
+    "id": "2019-2020-a-7",
+    "year": "2019-2020",
+    "section": "A",
+    "main": 7,
+    "part": "",
+    "number": "7",
+    "title": "Stack expansion realizes leftmost derivation",
+    "topics": [
+      "LL parsing"
+    ],
+    "question": "In carrying out nonrecursive predictive parsing for an input string w and a parsing table M, if X is the top stack symbol, a is the current input symbol, and `M[X, a] = X → Y1Y2...Yk`, the following actions are carried out, **(15)**\n\n(i) output the production `X → Y1Y2...Yk`,\n\n(ii) pop the stack,\n\n(iii) push `Yk, Y(k-1), ..., Y2, Y1` onto the stack, with Y1 on top.\n\nExplain with necessary figures and justifications, how the actions above correspond to top-down left-most derivation.",
+    "solution": "Write the stack **from top to bottom** as `X γ` (omitting the bottom `$`), and let `u` be the already matched input prefix. The parser maintains the invariant:\n\n```text\nS ⇒*lm u X γ\n```\n\nThe matched part u consists only of terminals. When `M[X,a] = X → Y1 Y2 … Yk`, X is the next unexpanded symbol and therefore the **leftmost nonterminal** of this sentential form. Applying the rule produces:\n\n```text\nu X γ ⇒lm u Y1 Y2 … Yk γ\n```\n\nPopping X and pushing the body in reverse order makes the new top-to-bottom stack `Y1 Y2 … Yk γ`, exactly the unprocessed suffix of that new sentential form. Reverse pushing is essential: Y1 must be processed before Y2. Outputting the rule records this leftmost-derivation step. If the body is ε, nothing is pushed.\n\n```mermaid\nflowchart TD\n    X[\"X: next unexpanded nonterminal\"] --> Y1[\"Y1: processed first\"]\n    X --> Y2[\"Y2\"]\n    X --> Yk[\"Yk: processed last\"]\n```\n\nThe diagram shows one top-down tree expansion. A terminal on top is matched and removed; that advances the boundary between matched u and the pending stack without adding a derivation step.\n\nExample, for `S → A B`, `A → a`, `B → b` and input `ab$`:\n\n| Stack, top at left | Input | Action | Derivation recorded |\n|---|---|---|---|\n| S $ | ab$ | Expand S→AB; physically push B then A | S⇒AB |\n| A B $ | ab$ | Expand A→a | S⇒AB⇒aB |\n| a B $ | ab$ | Match a | unchanged |\n| B $ | b$ | Expand B→b | S⇒AB⇒aB⇒ab |\n| b $ | b$ | Match b | unchanged |\n| $ | $ | Accept | complete |\n\nAt every expansion the stack selects the leftmost outstanding tree node, so the result is a top-down, leftmost derivation rather than a rightmost derivation.",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          464,
+          465,
+          466,
+          467,
+          468,
+          469,
+          471,
+          472,
+          474,
+          475
+        ]
+      }
+    ],
+    "warnings": [],
+    "checks": [
+      "Checked the stack invariant before and after expansion and terminal matching, including the epsilon case."
+    ]
+  },
+  {
+    "id": "2019-2020-a-8",
+    "year": "2019-2020",
+    "section": "A",
+    "main": 8,
+    "part": "",
+    "number": "8",
+    "title": "Handle pruning for abbcde",
+    "topics": [
+      "LR parsing"
+    ],
+    "question": "Define a “handle” in LR parsing. For the grammar, **(15)**\n\n```text\nS → aAcBe\nA → Ab | b\nB → d\n```\n\nand the input string `abbcde`, identify the handles and show how these are being pruned for a case of LR parsing. You need to construct a table with the columns Stack, Input, and Action as a part of your answer.",
+    "solution": "A **handle** is a production `A → β` together with an occurrence of β in a right-sentential form such that replacing that occurrence by A reverses one step of a rightmost derivation. It is an occurrence at a particular position, not merely any substring matching a production body.\n\nThe rightmost derivation is:\n\n```text\nS ⇒ a A c B e ⇒ a A c d e ⇒ a A b c d e ⇒ a b b c d e\n```\n\nConsequently the successive handles and prunings are:\n\n```text\na [b] b c d e  → a A b c d e       A → b\na [A b] c d e  → a A c d e         A → A b\na A c [d] e    → a A c B e         B → d\n[a A c B e]    → S                 S → a A c B e\n```\n\nIn the first line, the handle is the **first b**, not the second b. A symbol-stack trace (top at right) is:\n\n| Stack | Input | Action |\n|---|---|---|\n| $ | abbcde$ | shift a |\n| $ a | bbcde$ | shift b |\n| $ a b | bcde$ | reduce A→b |\n| $ a A | bcde$ | shift b |\n| $ a A b | cde$ | reduce A→Ab |\n| $ a A | cde$ | shift c |\n| $ a A c | de$ | shift d |\n| $ a A c d | e$ | reduce B→d |\n| $ a A c B | e$ | shift e |\n| $ a A c B e | $ | reduce S→aAcBe |\n| $ S | $ | accept |\n\nEach handle is on top of the stack immediately before its reduction. Reversing the reduction sequence reproduces the rightmost derivation above. Numerical LR states are unnecessary for this handle-pruning trace.",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          513,
+          514,
+          515,
+          516,
+          517,
+          518,
+          519
+        ]
+      }
+    ],
+    "warnings": [],
+    "checks": [
+      "Reversed the four reductions and reconstructed exactly S⇒aAcBe⇒aAcde⇒aAbcde⇒abbcde."
+    ]
+  },
+  {
+    "id": "2019-2020-a-9",
+    "year": "2019-2020",
+    "section": "A",
+    "main": 9,
+    "part": "",
+    "number": "9",
+    "title": "Augmentation and initial LR(1) closure",
+    "topics": [
+      "LR parsing",
+      "FIRST and FOLLOW"
+    ],
+    "question": "Augment the modified expression grammar given below and hence construct the initial set (often indicated as I0) of LR(1) items. **(15)**\n\n```text\nE → E + T | T\nT → T * F | F\nF → id\n```",
+    "solution": "Introduce a fresh start symbol E′:\n\n```text\nE′ → E\nE  → E + T | T\nT  → T * F | F\nF  → id\n```\n\nStart with `[E′ → ·E, $]`. The LR(1) closure rule is: from `[A → α·Bβ, a]`, add `[B → ·γ, b]` for every production `B → γ` and every `b ∈ FIRST(βa)`, repeating to a fixed point.\n\nThe resulting I₀ is shown compactly below. A lookahead set denotes one separate LR(1) item for **each** element in that set.\n\n| Dotted production | Lookaheads |\n|---|---|\n| E′ → ·E | {$} |\n| E → ·E + T | {$, +} |\n| E → ·T | {$, +} |\n| T → ·T * F | {$, +, *} |\n| T → ·F | {$, +, *} |\n| F → ·id | {$, +, *} |\n\nThis is **14 individual LR(1) items**: 1+2+2+3+3+3.\n\nWhy the extra lookaheads appear:\n\n1. The seed adds both E-productions with `$`.\n2. In `E → ·E + T`, `FIRST(+T a)={+}`, so both E-productions also get `+`.\n3. `E → ·T` passes `$` and `+` to both T-productions.\n4. In `T → ·T * F`, `FIRST(*F a)={*}`, so the T-productions also get `*`.\n5. `T → ·F` passes all three lookaheads to `F → ·id`.\n\nNo item for `(E)` is added because this modified grammar has no such production. No completed item occurs in I₀.\n\nThe supplied Rumi notes establish augmentation and the fixed-point LR(0) closure construction (PDF pp589–594). The table here is the worked **LR(1) extension**, using FIRST of the suffix plus lookahead rather than dropping lookaheads as in LR(0).",
+    "sources": [
+      {
+        "doc": "rumi",
+        "pages": [
+          543,
+          589,
+          591,
+          592,
+          593,
+          594
+        ]
+      }
+    ],
+    "warnings": [
+      "The supplied notes pages demonstrate LR(0)/SLR closure; the FIRST(βa) lookahead propagation above is the explicitly derived canonical LR(1) extension."
+    ],
+    "checks": [
+      "Computed canonical LR(1) closure programmatically to a fixed point: 14 items with exactly the six dotted productions and lookahead sets displayed."
+    ]
+  },
+  {
+    "id": "2019-2020-b-10a",
+    "year": "2019-2020",
+    "section": "B",
+    "main": 10,
+    "part": "a",
+    "number": "10(a)",
+    "title": "Declaration SDT for scalar and array types",
+    "topics": [
+      "Syntax-directed translation",
+      "Types and arrays"
+    ],
+    "question": "Below is a grammar for variable declarations of the forms such as `int i, k[2], j[2][3];` Now write an SDT to save the type and width information of all the declared identifiers in the symbol table. Assume that (i) types are represented as type expressions and (ii) widths of an integer and a float are 4 and 8 bytes, respectively. Make other justified assumptions as required. **(12)**\n\n```text\nV → T D ;\nT → int | float\nD → D1 , id C | id C\nC → [ num ] C1 | ε\n```",
+    "solution": "Let `array(n,t)` denote an n-element array of type t. Assume dimensions are positive integer constants; there is no alignment padding in an array; and the current symbol table has `install(name,type,width)`. Each declaration has one common base type, so two declaration-local variables `baseType` and `baseWidth` can carry that type through D and C. They are set before D is processed.\n\n```text\nV → T { baseType = T.type; baseWidth = T.width; } D ;\n\nT → int   { T.type = int;   T.width = 4; }\nT → float { T.type = float; T.width = 8; }\n\nD → D1 , id C\n    { install(id.lexeme, C.type, C.width); }\nD → id C\n    { install(id.lexeme, C.type, C.width); }\n\nC → [ num ] C1\n    { C.type = array(num.val, C1.type);\n      C.width = num.val * C1.width; }\nC → ε\n    { C.type = baseType;\n      C.width = baseWidth; }\n```\n\nThe action after T initializes the shared base information. The ε suffix starts with the scalar type; each surrounding pair of brackets wraps the completed inner type and multiplies its width. The D-action then installs the identifier with the **whole** C type, so the first dimension stays outermost.\n\nFor `int i, k[2], j[2][3];`:\n\n| Identifier | Type expression | Width in bytes |\n|---|---|---:|\n| i | int | 4 |\n| k | array(2,int) | 2×4 = 8 |\n| j | array(2,array(3,int)) | 2×(3×4) = 24 |\n\nIf relative storage locations are also wanted, an offset initially 0 may be stored with each entry and increased by that entry's width: i at 0, k at 4, j at 12, next free byte 36. Offsets are optional here; the requested fields are type and width.\n\nThe declaration-local base variables are safe because this grammar does not nest V declarations inside a C suffix. A reentrant implementation can instead pass the same information as inherited attributes. The left-recursive D grammar is retained as requested; this is an SDT, not a claim that the original grammar can be parsed directly by predictive recursive descent.",
+    "sources": [
+      {
+        "doc": "kms",
+        "pages": [
+          118,
+          119,
+          125,
+          126,
+          127,
+          128,
+          130,
+          131
+        ]
+      }
+    ],
+    "warnings": [
+      "KMS PDF pp126–130 contain swapped base-type names in parts of their rule tables (int shown as float and float as int). The question and the annotated int-array tree establish int/4 and float/8, which this answer uses."
+    ],
+    "checks": [
+      "Visually checked KMS p126 against its extracted text; confirmed the base-type typo and the correct array(2,array(3,int)) width 24 in the tree.",
+      "Calculated example widths 4,8,24 and cumulative offsets 0,4,12,36."
+    ]
+  },
+  {
+    "id": "2019-2020-b-10b",
+    "year": "2019-2020",
+    "section": "B",
+    "main": 10,
+    "part": "b",
+    "number": "10(b)",
+    "title": "Three-address code for a[b[i]][c[j]]",
+    "topics": [
+      "Syntax-directed translation",
+      "Types and arrays",
+      "Intermediate code"
+    ],
+    "question": "Below is an SDT for generating three-address code for array references. What will be the three-address code for the expression `a[b[i]][c[j]]` generated by the given SDT? Assume that the arrays a, b and c are declared as, `int a[5][5], b[3], c[3]` and types and widths of the arrays have correctly been saved in the symbol table. The attributes associated with the terminals and nonterminals have their usual meanings. Make other justified assumptions as required. **(11)**\n\n```text\nL → id [ E ]\n    { L.array = top.get(id.lexeme);\n      L.type = L.array.type.elem;\n      L.addr = new Temp();\n      gen(L.addr '=' E.addr '*' L.type.width); }\n\n  | L1 [ E ]\n    { L.array = L1.array;\n      L.type = L1.type.elem;\n      t = new Temp();\n      L.addr = new Temp();\n      gen(t '=' E.addr '*' L.type.width);\n      gen(L.addr '=' L1.addr '+' t); }\n\nE → id\n    { E.addr = top.get(id.lexeme); }\n\n  | L\n    { E.addr = new Temp();\n      gen(E.addr '=' L.array.base '[' L.addr ']'); }\n```",
+    "solution": "Assume zero-based, row-major arrays and that an array reference `base[offset]` uses a **byte offset**. An `int` has width 4.\n\n| Array | Type | Full width | Element/subarray width used by first index |\n|---|---|---:|---:|\n| a | array(5,array(5,int)) | 100 | 20 |\n| b | array(3,int) | 12 | 4 |\n| c | array(3,int) | 12 | 4 |\n\nExecuting the given SDT left-to-right generates:\n\n```text\nt1 = i * 4\nt2 = b[t1]\nt3 = t2 * 20\nt4 = j * 4\nt5 = c[t4]\nt6 = t5 * 4\nt7 = t3 + t6\nt8 = a[t7]\n```\n\nFor `b[i]`, the L-production computes byte offset t1 and `E → L` loads its value into t2. The first a index therefore computes `20*b[i]`; after this index `L.type=array(5,int)`, width 20. The `c[j]` reference similarly loads its integer value into t5. The second a index selects an int, so its stride is 4; the outer `L → L1[E]` adds the offsets, and the final `E → L` loads a's scalar element.\n\nThe final offset is `20*b[i] + 4*c[j] = 4*(5*b[i]+c[j])`, and the expression's value is t8. The SDT supplies no bounds checks; valid execution assumes i,j index b,c and the loaded b[i],c[j] values lie in 0…4.",
+    "sources": [
+      {
+        "doc": "kms",
+        "pages": [
+          147,
+          148,
+          149,
+          150,
+          151
+        ]
+      }
+    ],
+    "warnings": [
+      "Uses zero-based row-major layout and byte-offset array instructions, matching the supplied SDT. The SDT does not emit bounds checks."
+    ],
+    "checks": [
+      "Symbolically evaluated the generated offset as 4*(5*b[i]+c[j]); verified all strides against the declared int-array widths."
+    ]
+  },
+  {
+    "id": "2019-2020-b-10c",
+    "year": "2019-2020",
+    "section": "B",
+    "main": 10,
+    "part": "c",
+    "number": "10(c)",
+    "title": "Implement prefix SDT after building a parse tree",
+    "topics": [
+      "Syntax-directed translation",
+      "LL parsing",
+      "LR parsing"
+    ],
+    "question": "The following SDT prints the prefix form of an expression, i.e., performs infix to prefix translation. Explain why it is not possible to implement the SDT during either top-down or bottom-up parsing. Describe, then, how such an SDT can be implemented. **(6+6)**\n\n```text\nL → E n\nE → {print('+');} E1 + T\nE → T\nT → {print('*');} T1 * F\nT → F\nF → (E)\nF → digit {print(digit.level);}\n```",
+    "solution": "The printed action for `E → E1 + T` must output `+` **before** output for E1, although the parser has not yet seen the `+` that confirms this production when it begins E1. The same problem occurs for `T → T1 * F`.\n\n**Top-down:** the grammar is left-recursive, so direct predictive recursive descent already fails. More fundamentally, executing the leading print action requires deciding the full operator structure before the left operand is parsed. The action cannot simply be copied into an LL parser to preserve the specified output order.\n\n**Bottom-up:** a normal reduction recognizes `E1 + T` only after E1 and T have been read. Their operand output would already have happened if actions were executed immediately, so printing `+` at reduction gives postfix order instead. Treating the leading action as an ε marker would demand that same premature decision before the operator has been recognized. Thus the given action placements do not admit the ordinary direct parsing-time implementation described in the notes.\n\nA general implementation is:\n\n1. Parse the input **ignoring actions**, constructing the complete parse tree.\n2. Insert an action child at each action's precise position in the corresponding production body: `print('+')` before E1, `print('*')` before T1, and digit printing after the digit leaf.\n3. Traverse the augmented tree in preorder, visiting children left to right, and execute an action when its node is visited.\n\nFor `3*5+4`, the resulting tree visits the action for the root `+`, then `*` in the left subtree, then digits 3,5,4. The output is `+ * 3 5 4`. Equivalently, construct an AST and print every operator before its operands; or synthesize strings and emit the final string after parsing. These defer irreversible output until the expression's structure is known.\n\n**Transcription details.** The question prints `digit.level`. The reference example on KMS PDF p59 visibly uses `digit.lexval`; prefix translation requires the digit's lexical value. This answer treats `level` as that typo, rather than silently assigning it a new meaning. `L → E n` is preserved: n is treated as the line/end delimiter (often newline); if it is instead a literal terminal `n`, the translation still just consumes that delimiter without printing it.",
+    "sources": [
+      {
+        "doc": "kms",
+        "pages": [
+          59,
+          60,
+          61,
+          63
+        ]
+      }
+    ],
+    "warnings": [
+      "Original prompt says digit.level; KMS p59 prints digit.lexval. A literal undefined level attribute would not define the intended prefix translation.",
+      "Original L→E n does not define n; interpreted as an end delimiter, with the literal-terminal alternative stated."
+    ],
+    "checks": [
+      "Rendered and visually read KMS p59 to verify digit.lexval and the action positions.",
+      "Traced the action-node preorder for 3*5+4 and obtained + * 3 5 4."
+    ]
+  },
+  {
+    "id": "2019-2020-b-11a",
+    "year": "2019-2020",
+    "section": "B",
+    "main": 11,
+    "part": "a",
+    "number": "11(a)",
+    "title": "Basic blocks and flow graph for matrix transpose",
+    "topics": [
+      "Code optimization",
+      "Control flow and backpatching"
+    ],
+    "question": "Consider the three-address code below and answer the following questions.\n\n```text\n 1  L1:  i = 0\n 2  L3:  d = 4\n 3  L4:  iffalse i < d goto L2\n 4  L5:  j = i + 1\n 5  L6:  iffalse j < d goto L7\n 6  L8:  t1 = i * 16\n 7       t2 = j * 4\n 8       t3 = t1 + t2\n 9       temp = a[t3]\n10  L9:  t4 = i * 16\n11       t5 = j * 4\n12       t6 = t4 + t5\n13       t7 = j * 16\n14       t8 = i * 4\n15       t9 = t7 + t8\n16       t10 = a[t9]\n17       a[t6] = t10\n18  L10: t11 = j * 16\n19       t12 = i * 4\n20       t13 = t11 + t12\n21       a[t13] = temp\n22  L11: j = j + 1\n23       goto L6\n24  L7:  i = i + 1\n25       goto L4\n26  L2:\n```\n\n\n\nIdentify the basic blocks and construct the flow graph for the given code. **(17)**",
+    "solution": "Leaders are **1,3,4,5,6,24,26**: instruction 1 starts the program; 3,5,24,26 are jump targets; and 4,6 follow conditional branches. Merely having a label does not force a new block when that label is never a branch target.\n\n| Block | Instructions | Meaning / ending |\n|---|---|---|\n| B1 | 1–2 | Initialize i=0 and d=4 |\n| B2 | 3 | Test i<d; false→B7 |\n| B3 | 4 | Initialize j=i+1 |\n| B4 | 5 | Test j<d; false→B6 |\n| B5 | 6–23 | Compute offsets, exchange a[i][j]/a[j][i], increment j; goto B4 |\n| B6 | 24–25 | Increment i; goto B2 |\n| B7 | 26 | Exit label L2 |\n\n```mermaid\nflowchart TD\n    B1[\"B1: 1–2\"] --> B2[\"B2: 3, i < d?\"]\n    B2 -->|true| B3[\"B3: 4, j = i + 1\"]\n    B2 -->|false| B7[\"B7: 26, exit\"]\n    B3 --> B4[\"B4: 5, j < d?\"]\n    B4 -->|true| B5[\"B5: 6–23, swap and j++\"]\n    B4 -->|false| B6[\"B6: 24–25, i++\"]\n    B5 --> B4\n    B6 --> B2\n```\n\nThe inner natural loop is B4–B5; the outer loop comprises B2,B3,B4,B5,B6. B1 is a preheader. Labels L3,L5,L8,L9,L10,L11 are not independently targeted by the given branches, so they need no extra block split.",
+    "sources": [
+      {
+        "doc": "kms",
+        "pages": [
+          322,
+          324,
+          325,
+          326,
+          327,
+          329,
+          330
+        ]
+      }
+    ],
+    "warnings": [],
+    "checks": [
+      "Applied all three leader rules to the exact 26-line listing and checked each branch/fall-through edge against the seven-block graph."
+    ]
+  },
+  {
+    "id": "2019-2020-b-11b",
+    "year": "2019-2020",
+    "section": "B",
+    "main": 11,
+    "part": "b",
+    "number": "11(b)",
+    "title": "Optimize the transpose loop and remove induction variables",
+    "topics": [
+      "Code optimization",
+      "Types and arrays",
+      "Intermediate code"
+    ],
+    "question": "Consider the three-address code below and answer the following questions.\n\n```text\n 1  L1:  i = 0\n 2  L3:  d = 4\n 3  L4:  iffalse i < d goto L2\n 4  L5:  j = i + 1\n 5  L6:  iffalse j < d goto L7\n 6  L8:  t1 = i * 16\n 7       t2 = j * 4\n 8       t3 = t1 + t2\n 9       temp = a[t3]\n10  L9:  t4 = i * 16\n11       t5 = j * 4\n12       t6 = t4 + t5\n13       t7 = j * 16\n14       t8 = i * 4\n15       t9 = t7 + t8\n16       t10 = a[t9]\n17       a[t6] = t10\n18  L10: t11 = j * 16\n19       t12 = i * 4\n20       t13 = t11 + t12\n21       a[t13] = temp\n22  L11: j = j + 1\n23       goto L6\n24  L7:  i = i + 1\n25       goto L4\n26  L2:\n```\n\n\n\nOptimize the code by using applicable transformations from the following list. (i) common subexpression elimination, (ii) copy propagation, (iii) dead code elimination, (iv) reduction in strength on induction variables, (v) elimination of induction variables. **(18)**",
+    "solution": "With 4-byte elements and 16-byte rows, the two addresses are `16*i+4*j` and `16*j+4*i`. The loop swaps each off-diagonal pair once, for `0 ≤ i < j < 4`, so its effect is to transpose a 4×4 matrix.\n\n**Common subexpressions, copies, and dead computations.** Within the inner body, replace `t4` by t1, `t5` by t2, and `t6` by t3. Similarly replace t11 by t7, t12 by t8, and t13 by t9. Propagate these copies into the stores and remove the unused copies/computations. The body becomes:\n\n```text\nt1 = i * 16\nt2 = j * 4\nt3 = t1 + t2\ntemp = a[t3]\nt7 = j * 16\nt8 = i * 4\nt9 = t7 + t8\nt10 = a[t9]\na[t3] = t10\na[t9] = temp\nj = j + 1\ngoto L6\n```\n\nDo not remove either array load or reorder a load past a store: the two original values must be saved before the exchange.\n\n**Strength reduction.** At fixed i, define `p=16*i+4*j` and `q=16*j+4*i`. Incrementing j increases p by 4 and q by 16. At the start of each row, j=i+1 gives `p=20*i+4` and `q=20*i+16`. Put `diag=20*i` and `rowEnd=16*i+16`; p<rowEnd is equivalent to j<4. Across outer iterations, diag increases by 20 and rowEnd by 16. The outer test i<4 becomes diag<80.\n\nA final optimized version is:\n\n```text\n    d = 4\n    diag = 0\n    rowEnd = 16\nOuter:\n    iffalse diag < 80 goto Done\n    p = diag + 4\n    q = diag + 16\nInner:\n    iffalse p < rowEnd goto NextRow\n    temp = a[p]\n    value = a[q]\n    a[p] = value\n    a[q] = temp\n    p = p + 4\n    q = q + 16\n    goto Inner\nNextRow:\n    diag = diag + 20\n    rowEnd = rowEnd + 16\n    goto Outer\nDone:\n    i = 4\n    j = 4\n```\n\nThe final assignments preserve the original loop counters if they are observable after exit; they can be deleted when i,j are dead. Retaining d=4 also preserves d. Compiler temporaries and the new induction variables are assumed dead on exit. There are no multiplications in the transformed loop, and the original induction variables i and j no longer control it.\n\nThe actual swap offsets are:\n\n| (i,j) | p | q |\n|---|---:|---:|\n| (0,1) | 4 | 16 |\n| (0,2) | 8 | 32 |\n| (0,3) | 12 | 48 |\n| (1,2) | 24 | 36 |\n| (1,3) | 28 | 52 |\n| (2,3) | 44 | 56 |\n\nFor i=3 the inner loop is empty, as in the original; the final counters are i=j=4. Strength reduction is based on the listed induction-variable rules, and CSE/copy propagation remove the repeated offset arithmetic rather than assuming array values remain invariant across stores.",
+    "sources": [
+      {
+        "doc": "kms",
+        "pages": [
+          337,
+          338,
+          344,
+          345,
+          540,
+          541,
+          552,
+          554,
+          555,
+          559,
+          560,
+          561,
+          563,
+          565
+        ]
+      }
+    ],
+    "warnings": [
+      "Assumes ordinary nonvolatile array storage, no aliasing of scalar variables with array elements, and compiler temporaries dead on exit. Final i=4,j=4,d=4 are explicitly preserved.",
+      "The bounds and strides are specific to the exact 4×4/4-byte listing; this code must be rederived for other dimensions."
+    ],
+    "checks": [
+      "Executed original and optimized loops on 100 randomized 4×4 matrices; complete final arrays and i,j,d agree.",
+      "Verified exactly six swaps with the offset pairs shown; diagonal elements remain unchanged and every off-diagonal pair is exchanged once."
+    ]
+  },
+  {
+    "id": "2019-2020-b-12a",
+    "year": "2019-2020",
+    "section": "B",
+    "main": 12,
+    "part": "a",
+    "number": "12(a)",
+    "title": "Short-circuit boolean code with backpatching",
+    "topics": [
+      "Control flow and backpatching",
+      "Syntax-directed translation",
+      "Intermediate code"
+    ],
+    "question": "What is backpatching? Write down a translation scheme (semantic actions) for generating code using backpatching for boolean expressions yielded by the following productions. You may add marker symbols in the productions as required. **(3+9)**\n\n```text\nB → B1 || B2\nB → B1 && B2\nB → E1 rel E2\n```",
+    "solution": "**Backpatching** emits a jump before its destination is known, records the jump's instruction number in a list, and fills the destination later. It enables one-pass construction of short-circuit boolean code.\n\nUse synthesized lists `B.truelist` and `B.falselist`; `nextinstr` is the next instruction number. `makelist(i)` creates a singleton list, `merge(p,q)` joins lists, and `backpatch(p,k)` writes target k into every jump in p. Add a marker M at the beginning of the second operand:\n\n```text\nB → B1 || M B2\n    { backpatch(B1.falselist, M.instr);\n      B.truelist = merge(B1.truelist, B2.truelist);\n      B.falselist = B2.falselist; }\n\nB → B1 && M B2\n    { backpatch(B1.truelist, M.instr);\n      B.truelist = B2.truelist;\n      B.falselist = merge(B1.falselist, B2.falselist); }\n\nB → E1 rel E2\n    { B.truelist = makelist(nextinstr);\n      B.falselist = makelist(nextinstr + 1);\n      gen('if ' E1.addr rel.op E2.addr ' goto __');\n      gen('goto __'); }\n\nM → ε\n    { M.instr = nextinstr; }\n```\n\n`gen` appends one instruction and increments nextinstr. The marker captures the second operand's start **before** that operand emits code. For OR, only a false first operand needs to evaluate B2; for AND, only a true first operand does. The result lists remain unresolved until an enclosing boolean/statement supplies their destinations. Expression evaluation, if needed, occurs before the relational test; rel.op identifies the actual comparison.",
+    "sources": [
+      {
+        "doc": "kms",
+        "pages": [
+          184,
+          185,
+          186,
+          187,
+          188,
+          191,
+          192
+        ]
+      }
+    ],
+    "warnings": [],
+    "checks": [
+      "Checked OR patches only the first falselist and AND only the first truelist; both preserve the required short-circuit behavior."
+    ]
+  },
+  {
+    "id": "2019-2020-b-12b",
+    "year": "2019-2020",
+    "section": "B",
+    "main": 12,
+    "part": "b",
+    "number": "12(b)",
+    "title": "Annotated backpatch tree beginning at instruction 200",
+    "topics": [
+      "Control flow and backpatching",
+      "Syntax-directed translation",
+      "Intermediate code"
+    ],
+    "question": "Based on the SDT in Question 12(a) above, draw the annotated parse tree for the expression: `x != y && x > 20 || x < 100`. Assume that the operators `||` and `&&` are left-associative and `&&` has higher precedence than `||`. Assume that the starting instruction number is 200. **(10)**\n\nReferenced productions from 12(a):\n\n```text\nB → B1 || B2\nB → B1 && B2\nB → E1 rel E2\n```",
+    "solution": "The stipulated precedence gives **`((x != y) && (x > 20)) || (x < 100)`**. Treat identifiers and constants as directly available operands, so each comparison emits two instructions.\n\nThe annotated parse tree is shown below. `T` and `F` mean truelist and falselist; each marker derives ε.\n\n```mermaid\nflowchart TD\n    B[\"B: OR; T={202,204}; F={205}\"] --> C[\"B1: AND; T={202}; F={201,203}\"]\n    B --> OR[\"||\"]\n    B --> M2[\"M2→ε: instr=204\"]\n    B --> R[\"B4: x < 100; T={204}; F={205}\"]\n    C --> P[\"B2: x != y; T={200}; F={201}\"]\n    C --> AND[\"&&\"]\n    C --> M1[\"M1→ε: instr=202\"]\n    C --> Q[\"B3: x > 20; T={202}; F={203}\"]\n    P --> X1[\"E1.addr=x\"]\n    P --> NE[\"rel.op=!=\"]\n    P --> Y[\"E2.addr=y\"]\n    Q --> X2[\"E3.addr=x\"]\n    Q --> GT[\"rel.op=>\"]\n    Q --> N20[\"E4.addr=20\"]\n    R --> X3[\"E5.addr=x\"]\n    R --> LT[\"rel.op=<\"]\n    R --> N100[\"E6.addr=100\"]\n```\n\nEmitting left to right gives leaf lists `{200}/{201}`, `{202}/{203}`, `{204}/{205}`. At AND, backpatch `{200}` to 202, yielding `T={202}, F={201,203}`. At OR, backpatch `{201,203}` to 204, yielding `T={202,204}, F={205}`. The code after all **internal** backpatching is:\n\n```text\n200: if x != y goto 202\n201: goto 204\n202: if x > 20 goto __true__\n203: goto 204\n204: if x < 100 goto __true__\n205: goto __false__\n```\n\nThe remaining lists are the final expression's result: backpatch instructions 202 and 204 to the enclosing true destination, and instruction 205 to its false destination. Neither destination is specified by this question, so inventing numeric continuation addresses would hide necessary context. `nextinstr=206` after emitting the expression.\n\nIf x=y, control skips `x>20` and evaluates `x<100`. If x≠y and x>20, control takes the true continuation without evaluating `x<100`. These paths match the requested short-circuit expression.",
+    "sources": [
+      {
+        "doc": "kms",
+        "pages": [
+          185,
+          186,
+          187,
+          188,
+          191,
+          192
+        ]
+      }
+    ],
+    "warnings": [
+      "No enclosing statement gives final true/false target addresses. The final truelist/falselist are retained as the correct unresolved interface; all internal branches have numeric targets.",
+      "Constants 20 and 100 are taken as immediate operands, so no extra constant-load TAC instructions alter the requested start numbering."
+    ],
+    "checks": [
+      "Simulated the six-instruction control flow over a grid of x,y values and matched ((x!=y) and (x>20)) or (x<100) in every case.",
+      "Checked instruction range 200–205, marker addresses 202/204, final lists {202,204}/{205}, and nextinstr 206."
+    ]
+  },
+  {
+    "id": "2019-2020-b-12c",
+    "year": "2019-2020",
+    "section": "B",
+    "main": 12,
+    "part": "c",
+    "number": "12(c)",
+    "title": "Stable mark-and-compact locations after deleting A to C",
+    "topics": [
+      "Garbage collection",
+      "Runtime environments"
+    ],
+    "question": "Consider the network of objects below. Suppose at some point in time, the pointer `A → C` is deleted. Then we perform a mark-and-compact garbage collector on the network. Also, suppose that, **(13)**\n\ni. Each object has size 50 bytes, and\n\nii. Initially, all the nine objects in the heap are arranged in alphabetical order, starting at byte 0 of the heap.\n\nWhat is the address of each object after garbage collection? Draw the heap showing locations of the allocated objects before and after running garbage collection.\n\n**Figure for Question 12(c) - directed object network before the specified deletion**\n\n```mermaid\nflowchart TD\n    X[X] --> A((A))\n    A --> B((B))\n    A --> C((C))\n    B --> D((D))\n    B --> E((E))\n    C --> E\n    C --> F((F))\n    D --> G((G))\n    G --> E\n    E --> H((H))\n    F --> H\n    G --> I((I))\n    H --> I\n```",
+    "solution": "Treat X as a root outside the nine-object heap. After deleting A→C, trace from X→A:\n\n```text\nA → B\nB → D, E\nD → G\nG → E, I\nE → H\nH → I\n```\n\nThus the reachable set is **{A,B,D,E,G,H,I}**. C and F are unreachable, even though their outgoing edges lead to live objects; outgoing pointers from unreachable objects do not keep their source objects alive. The G→E edge remains present.\n\nUse the notes' mark-and-compact order: mark reachable objects, scan the old heap from low to high and assign packed addresses, then move objects and update all root/object pointers.\n\n| Object | Before: byte interval | Reachable? | After: byte interval |\n|---|---|---|---|\n| A | 0–49 | yes | 0–49 |\n| B | 50–99 | yes | 50–99 |\n| C | 100–149 | no | reclaimed |\n| D | 150–199 | yes | 100–149 |\n| E | 200–249 | yes | 150–199 |\n| F | 250–299 | no | reclaimed |\n| G | 300–349 | yes | 200–249 |\n| H | 350–399 | yes | 250–299 |\n| I | 400–449 | yes | 300–349 |\n\nThe heap layout before collection is `A | B | C | D | E | F | G | H | I`, one 50-byte slot each. After collection it is `A | B | D | E | G | H | I | free 350–449`. The new allocation pointer is **350**, with 100 bytes reclaimed.\n\nUpdated pointers, shown as object:start-address, are:\n\n```text\nX → A:0\nA:0   → B:50\nB:50  → D:100, E:150\nD:100 → G:200\nE:150 → H:250\nG:200 → E:150, I:300\nH:250 → I:300\n```\n\nIn particular, G's reference to E must be rewritten from old address 200 to new address 150. Moving bytes without fixing references would not be a correct compacting collector.",
+    "sources": [
+      {
+        "doc": "kms",
+        "pages": [
+          266,
+          280,
+          281,
+          282,
+          283,
+          284
+        ]
+      }
+    ],
+    "warnings": [
+      "Assumes X is the sole external root and compaction preserves old address order, as in the notes’ low-to-high NewLocation scan. Other roots or a different placement policy could change reachability or addresses."
+    ],
+    "checks": [
+      "Ran graph reachability after removing only A→C: exactly seven live objects and C,F dead.",
+      "Computed packed offsets with 50-byte objects and checked all remaining edges, including G→E, against the new address map."
+    ]
+  },
+  {
+    "id": "2019-2020-b-13a",
+    "year": "2019-2020",
+    "section": "B",
+    "main": 13,
+    "part": "a",
+    "number": "13(a)",
+    "title": "Backward liveness and next-use table",
+    "topics": [
+      "Liveness analysis",
+      "Code optimization",
+      "Register allocation"
+    ],
+    "question": "Determine the liveness and next-use information for each statement in the following basic block. Also show the state of the symbol table at each of the steps of your algorithm. How does next-use information facilitate code optimization? Illustrate using the example of the given basic block. **(12+6)**\n\n```text\nt = a + b\nu = c + d\nt = d - b\nv = a + c\nd = t + v\n```",
+    "solution": "Number the statements 1…5. Following KMS PDF p333, initialize non-temporary a,b,c,d as live on exit. Treat t,u,v as compiler temporaries dead on exit. `Lk` means live with next local use at statement k; `L–` means live beyond the block with no next use inside it; `N` means dead with no next use.\n\nScan backward. For `i: x=y op z`, first attach the current table states of x,y,z (the state **after** i); then set x to N and set y,z to Li. The attached information is:\n\n| Statement | Defined variable after statement | First operand after statement | Second operand after statement |\n|---|---|---|---|\n| 1: t=a+b | t: N | a: L4 | b: L3 |\n| 2: u=c+d | u: N | c: L4 | d: L3 |\n| 3: t=d-b | t: L5 | d: N | b: L– |\n| 4: v=a+c | v: L5 | a: L– | c: L– |\n| 5: d=t+v | d: L– | t: N | v: N |\n\nThe complete symbol-table state after each backward processing step (therefore **immediately before** that instruction in forward execution) is:\n\n| Backward step / program point | a | b | c | d | t | u | v |\n|---|---|---|---|---|---|---|---|\n| Initialize: after 5 / exit | L– | L– | L– | L– | N | N | N |\n| Process 5: before 5 | L– | L– | L– | N | L5 | N | L5 |\n| Process 4: before 4 | L4 | L– | L4 | N | L5 | N | N |\n| Process 3: before 3 | L4 | L3 | L4 | L3 | N | N | N |\n| Process 2: before 2 | L4 | L3 | L2 | L2 | N | N | N |\n| Process 1: before 1 / entry | L1 | L1 | L2 | L2 | N | N | N |\n\nThis information enables:\n\n- **Dead-code elimination:** line 1's t is killed by line 3 before any use, and u from line 2 is never used. Both computations can be removed if these ordinary arithmetic operations have no observable traps/side effects. The useful block becomes `t=d-b; v=a+c; d=t+v`.\n- **Register reuse:** after line 5, t and v are dead and need no stores. A register holding the old d can be reused after line 3 because that value has no subsequent use; line 5 defines a new d. A dead temporary is a better eviction choice than a live value; among live candidates, a more distant next use can guide spilling.\n- **Preserving live values:** `L–` does not mean dead. a,b,c must remain available at exit (their memory copies are already valid), and the final d must be preserved.\n\nThe question does not state the exit live set. If t,u,v are intended as ordinary live-out variables instead, initialize them `L–`; in particular u then makes line 2 necessary. If all variables are dead on exit, the same backward algorithm applies but the final d computation is itself removable. Liveness is a property of a program point and a stated boundary, so that assumption cannot be hidden.",
+    "sources": [
+      {
+        "doc": "kms",
+        "pages": [
+          332,
+          333,
+          334,
+          344,
+          352,
+          355,
+          356
+        ]
+      }
+    ],
+    "warnings": [
+      "Exit liveness is not specified in the question. This table uses the notes’ convention: a,b,c,d live out and t,u,v temporary/dead out. The consequences of another boundary are stated.",
+      "Dead arithmetic can be removed only when its evaluation has no observable side effects or required trap behavior."
+    ],
+    "checks": [
+      "Computed backward live/next-use states programmatically and matched all six full-table rows and all attached operand states.",
+      "Verified that the t definition at line 1 reaches no use before line 3 and that u has no use in the block."
+    ]
+  },
+  {
+    "id": "2019-2020-b-13b",
+    "year": "2019-2020",
+    "section": "B",
+    "main": 13,
+    "part": "b",
+    "number": "13(b)",
+    "title": "Efficient two-register code and descriptors",
+    "topics": [
+      "Register allocation",
+      "Liveness analysis",
+      "Intermediate code"
+    ],
+    "question": "Translate the following basic block consisting of three-address statements into machine-code instructions for the simple machine model of your text. Assume that **two** registers are available. Make sure the registers are allocated and assigned efficiently to avoid unnecessary loads and stores. Show the register and address descriptors after each step. Assume p and q are temporary variables and the remaining variables are live on exit from the block. **(17)**\n\n```text\np = a + b\nq = c - p\nc = d\nd = q - c\nexit\n```",
+    "solution": "Use the notes' machine model: `LD R,x` loads memory x; `ST x,R` stores a register; `ADD/SUB Rd,Rs1,Rs2` use two register operands and may overwrite an operand register. There are only R1 and R2. p,q are dead at exit; a,b,c,d are live. Initially the memory copy of each source variable is current.\n\nAn efficient instruction sequence is:\n\n```text\nLD  R1, a\nLD  R2, b\nADD R1, R1, R2       // p = a+b\nLD  R2, c\nSUB R1, R2, R1       // q = old_c-p\nLD  R2, d            // c=d: R2 now represents both c and old d\nSUB R1, R1, R2       // d = q-c\nST  c, R2\nST  d, R1\n```\n\nNo machine move is needed for `c=d`: the descriptor records that c and d share the value in R2 until d is redefined. Overwriting the old p or q is safe after its final use. a,b retain their unchanged memory values; p,q never need to be stored.\n\nLet `Mx` mean the memory home of x. Descriptors below list locations of each **current** variable value; an omitted/stale memory location must not be used. Dead temporary names are removed once consumed, which is safe because they have no future uses.\n\n| After instruction | R1 descriptor | R2 descriptor | a | b | c | d | p | q |\n|---|---|---|---|---|---|---|---|---|\n| initial | ∅ | ∅ | {Ma} | {Mb} | {Mc} | {Md} | ∅ | ∅ |\n| LD R1,a | {a} | ∅ | {Ma,R1} | {Mb} | {Mc} | {Md} | ∅ | ∅ |\n| LD R2,b | {a} | {b} | {Ma,R1} | {Mb,R2} | {Mc} | {Md} | ∅ | ∅ |\n| ADD R1,R1,R2 | {p} | {b} | {Ma} | {Mb,R2} | {Mc} | {Md} | {R1} | ∅ |\n| LD R2,c | {p} | {c} | {Ma} | {Mb} | {Mc,R2} | {Md} | {R1} | ∅ |\n| SUB R1,R2,R1 | {q} | {c} | {Ma} | {Mb} | {Mc,R2} | {Md} | ∅ | {R1} |\n| LD R2,d; bind c=d | {q} | {c,d} | {Ma} | {Mb} | {R2} | {Md,R2} | ∅ | {R1} |\n| SUB R1,R1,R2 | {d} | {c} | {Ma} | {Mb} | {R2} | {R1} | ∅ | ∅ |\n| ST c,R2 | {d} | {c} | {Ma} | {Mb} | {Mc,R2} | {R1} | ∅ | ∅ |\n| ST d,R1 | {d} | {c} | {Ma} | {Mb} | {Mc,R2} | {Md,R1} | ∅ | ∅ |\n\nWhen `c=d` occurs, old Mc becomes stale and is removed from c's descriptor. When the final subtraction redefines d, old Md becomes stale and d is removed from R2's descriptor, while c remains in R2. The two stores at exit make both changed live variables' memory homes current.\n\nThis uses **4 loads, 3 arithmetic instructions, and 2 stores**, with no spills or register-to-register copies. Under this model those counts are minimal: the four independent initial inputs a,b,c,d must be loaded, three arithmetic operations implement the TAC, and the two changed live-out values must be stored. Final values are `c=old_d` and `d=old_c-(a+b)-old_d`.",
+    "sources": [
+      {
+        "doc": "kms",
+        "pages": [
+          346,
+          348,
+          351,
+          352,
+          353,
+          354,
+          355,
+          356
+        ]
+      }
+    ],
+    "warnings": [],
+    "checks": [
+      "Simulated all nine instructions on 100 randomized initial values; final a,b,c,d match the TAC.",
+      "Audited every load, overwrite, copy binding, and exit store against the displayed register/address descriptors; only R1,R2 are used."
+    ]
+  }
+]

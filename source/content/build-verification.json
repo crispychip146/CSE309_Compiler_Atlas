@@ -1,0 +1,14 @@
+{
+  "complete": true,
+  "cards": 127,
+  "yearCounts": {
+    "2023-2024": 25,
+    "2022-2023": 32,
+    "2021-2022": 27,
+    "2020-2021": 22,
+    "2019-2020": 21
+  },
+  "mainQuestions": 45,
+  "mermaidBlocks": 13,
+  "mathErrors": []
+}

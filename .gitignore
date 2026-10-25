@@ -1,0 +1,18 @@
+# Node dependencies & dist
+node_modules/
+source/dist/
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Editor directories
+.vscode/
+.idea/
+*.swp
+*.swo

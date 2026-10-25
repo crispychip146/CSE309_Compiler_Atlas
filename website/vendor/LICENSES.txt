@@ -1,0 +1,1 @@
+Mermaid 11.4.1 (MIT), KaTeX 0.16.22 (MIT), and marked 15.0.12 (MIT). Bundled dependencies preserve their license notices.

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#000000">
+  <meta name="description" content="Worked CSE 309 compiler exam questions. Browse five papers by year, section and topic, with step-by-step solutions and references to your lecture slides.">
+  <title>CSE 309 · Compiler Study Atlas</title>
+  <link rel="stylesheet" href="vendor/katex/katex.min.css"><link rel="stylesheet" href="style.css">
+</head>
+<body class="dark">
+  <a class="skip" href="#main">Skip to content</a>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <a class="brand" href="#catalog" aria-label="Compiler Atlas home"><span class="brandmark" aria-hidden="true">C<span>↳</span></span><span>COMPILER<br><b>ATLAS</b></span></a>
+      <button id="sidebarCollapseButton" class="icon-button sidebar-toggle" aria-label="Hide sidebar" title="Hide sidebar">◀</button>
+    </div>
+    <div class="course-label">BUET · CSE 309</div>
+    <nav aria-label="Main navigation">
+      <button class="nav-button active" data-view="years"><span aria-hidden="true">▤</span> Browse by year <span class="nav-count">5</span></button>
+      <button class="nav-button" data-view="topics"><span aria-hidden="true">⌘</span> Topic catalog <span class="nav-count" id="topicCount"></span></button>
+      <button class="nav-button" data-view="questions"><span aria-hidden="true">≡</span> All questions <span class="nav-count" id="allCount"></span></button>
+      <button class="nav-button" data-view="saved"><span aria-hidden="true">☆</span> Saved for revision <span class="nav-count" id="savedCount">0</span></button>
+    </nav>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-heading">THE PAPERS</div>
+    <div id="yearNav" class="year-nav"></div>
+    <div class="sidebar-bottom">
+      <button id="referenceButton" class="reference-link"><span aria-hidden="true">↗</span> Reference slides</button>
+      <div class="sidebar-meta"><span>Made for focused revision</span><button id="themeButton" aria-label="Switch color theme" title="Switch color theme">◐</button></div>
+    </div>
+  </aside>
+  <div class="backdrop" id="backdrop"></div>
+  <div class="workspace">
+    <header class="topbar">
+      <button id="menuButton" class="icon-button menu-button" aria-label="Toggle navigation" aria-expanded="true" title="Toggle sidebar">☰</button>
+      <div class="breadcrumb" id="breadcrumb">Study library <span>/</span> Past papers</div>
+      <div class="top-actions"><button class="text-button" id="exportButton">↓ <span>Download solutions</span></button><button class="text-button" id="printButton">⎙ <span>Print / PDF</span></button></div>
+    </header>
+    <main id="main" tabindex="-1">
+      <section class="intro" id="intro">
+        <div class="eyebrow"><span class="status-dot"></span> YOUR COMPILER REVISION LIBRARY</div>
+        <h1>From question<br>to <em>understanding.</em></h1>
+        <p>Five years of compiler questions, worked through step by step. Find a paper, follow a topic, and see why each answer works.</p>
+        <div class="intro-stats"><div><b id="paperStat">5</b><span>exam papers</span></div><div><b id="mainStat">45</b><span>main questions</span></div><div><b id="solutionStat">127</b><span>worked answers</span></div></div>
+        <div class="intro-graphic" aria-hidden="true"><span>source</span><i>↓</i><span class="graphic-focus">understand</span><i>↓</i><span>translate</span><div class="graphic-note">a little clarity at every step.</div></div>
+      </section>
+      <section class="search-section" aria-label="Search and filters">
+        <label class="search-box"><span aria-hidden="true">⌕</span><input id="searchInput" type="search" autocomplete="off" placeholder="Search a question, concept, or solution…" aria-label="Search questions and solutions"><kbd>/</kbd></label>
+        <div class="filters">
+          <label><span class="sr-only">Year</span><select id="yearFilter"><option value="">All years</option></select></label>
+          <label><span class="sr-only">Section</span><select id="sectionFilter"><option value="">All sections</option><option value="A">Section A</option><option value="B">Section B</option></select></label>
+          <label class="topic-select"><span class="sr-only">Topic</span><select id="topicFilter"><option value="">All topics</option></select></label>
+          <button id="clearFilters" class="clear-button" hidden>Clear filters ×</button>
+          <span id="filterStatus" class="filter-status" aria-live="polite"></span>
+        </div>
+      </section>
+      <section id="catalog" aria-live="polite"></section>
+      <section id="reader" class="reader" hidden aria-label="Question and worked solution">
+        <div class="reader-toolbar"><button id="backButton" class="text-button">← Back to questions</button><span id="readerPosition"></span><button id="previousButton" class="icon-button" aria-label="Previous question">←</button><button id="nextButton" class="icon-button" aria-label="Next question">→</button></div>
+        <article id="answerArticle"></article>
+      </section>
+      <footer class="footer"><span>Compiler Atlas <b>·</b> CSE 309</span><span>Worked derivations based on your two lecture PDFs. Source issues and assumptions are labeled.</span><button id="aboutButton">How to use this library ↗</button></footer>
+    </main>
+  </div>
+  <dialog id="referenceDialog" class="reference-dialog"><div class="dialog-top"><span class="eyebrow">YOUR REFERENCE SHELF</span><button id="closeDialog" class="icon-button" aria-label="Close references">×</button></div><h2>Go back to the source.</h2><p>Every solution includes links to the relevant PDF pages. Page numbers count from the start of the merged file, rather than the slide’s printed page number.</p><a class="reference-card" href="references/rumi.pdf" target="_blank" rel="noopener"><div><b>Rumi Sir Merged</b><span>Compiler foundations · lexical analysis · parsing</span></div><span>727 pages ↗</span></a><a class="reference-card" href="references/kms.pdf" target="_blank" rel="noopener"><div><b>KMS Merged</b><span>Translation · runtime · optimization · registers</span></div><span>568 pages ↗</span></a><a class="reference-card" href="references/exam-papers.pdf" target="_blank" rel="noopener"><div><b>Original exam papers</b><span>The five papers transcribed for this library</span></div><span>30 pages ↗</span></a><div class="dialog-note"><b>A note on the solutions</b><p>These are worked answers derived for the exam questions, not an official marking scheme. References identify the supporting course concepts. Where a paper is inconsistent or a derivation extends beyond the supplied slides, the answer says so.</p><p>Search covers the question and solution text. Use the year, section and topic filters together. Save questions for revision or mark them reviewed; those choices stay in this browser.</p><p>To save a PDF, choose <b>Print / PDF</b>. From a question, it prints that answer; from a catalog, it prints every answer matching your filters.</p></div></dialog>
+  <div id="toast" class="toast" role="status"></div>
+  <div id="printContent" class="print-content"></div>
+  <script id="atlasData" type="application/json">__ATLAS_DATA__</script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
